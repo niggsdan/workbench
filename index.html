@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Workbench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Syne:wght@700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app" class="app">
+
+  <header class="top">
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="5" rx="1.5" fill="#ff3b30"></rect><polyline points="5,12.5 9.5,23 14,15.5 18.5,23 23,12.5" fill="none" stroke="#f2f2f2" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+      <span class="brand-name">Workbench</span>
+    </div>
+    <nav class="tabs" aria-label="Áreas de trabalho">
+      <button type="button" class="tab on" aria-current="page">Editar</button>
+      <button type="button" class="tab" disabled title="Em breve">Cor</button>
+      <button type="button" class="tab" disabled title="Em breve">Entrega</button>
+    </nav>
+    <div class="grow"></div>
+    <div class="hist" role="group" aria-label="Histórico de ações">
+      <button type="button" class="btn" data-act="undo" id="undo-top"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 0 12h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Desfazer</button>
+      <button type="button" class="btn" data-act="redo" id="redo-top"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5 M20 9H10a6 6 0 0 0 0 12h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Refazer</button>
+    </div>
+    <label class="btn solid" for="file">Abrir vídeo</label>
+    <input id="file" type="file" accept="video/*" hidden>
+  </header>
+
+  <main class="main">
+    <section class="card monitor" aria-label="Monitor">
+      <div class="monitor-bar">
+        <div class="seg" id="ratios" role="group" aria-label="Formato da prévia"></div>
+        <span class="muted" id="file-name">Nenhum vídeo aberto</span>
+      </div>
+      <div class="stage" id="stage">
+        <div class="frame" id="frame">
+          <video id="video" playsinline muted preload="auto"></video>
+          <div class="chip chip-r" id="scene-chip" hidden></div>
+        </div>
+        <div class="empty" id="empty">
+          <strong>Abra um vídeo pra começar</strong>
+          <span>O arquivo fica no teu computador. Nada é enviado.</span>
+        </div>
+      </div>
+      <div class="transport">
+        <span class="mono" id="timecode">00:00,0 <span class="muted">/ 00:00,0</span></span>
+        <div class="tbtns">
+          <button type="button" class="btn sq" data-act="step-back" aria-label="Voltar 0,1 s">◀︎</button>
+          <button type="button" class="btn sq solid wide" data-act="play" id="play" aria-label="Tocar">▶︎</button>
+          <button type="button" class="btn sq" data-act="step-fwd" aria-label="Avançar 0,1 s">▶︎</button>
+        </div>
+        <span class="muted" id="analysis"></span>
+      </div>
+    </section>
+
+    <section class="card detector" id="detector" aria-label="Detector de cenas"></section>
+
+    <section class="card timeline" aria-label="Timeline">
+      <div class="tl-head"><h2>Timeline</h2><span class="muted" id="tl-meta"></span></div>
+      <div class="tl-body" id="timeline"></div>
+    </section>
+  </main>
+</div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
