@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Workbench</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%23232528%27/%3E%3Crect x=%274%27 y=%274%27 width=%2724%27 height=%274%27 fill=%27%238f1d33%27/%3E%3Cpath d=%27M5 11l4 16 7-10 7 10 4-16%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%273.2%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Syne:wght@700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css">
@@ -13,7 +14,7 @@
 
   <header class="top">
     <div class="brand">
-      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="5" rx="1.5" fill="#ff3b30"></rect><polyline points="5,12.5 9.5,23 14,15.5 18.5,23 23,12.5" fill="none" stroke="#f2f2f2" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="5" width="22" height="5" rx="1.5" fill="#8f1d33"></rect><polyline points="5,12.5 9.5,23 14,15.5 18.5,23 23,12.5" fill="none" stroke="#f0f0f0" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
       <span class="brand-name">Workbench</span>
     </div>
     <nav class="tabs" aria-label="Áreas de trabalho">
@@ -22,52 +23,76 @@
       <button type="button" class="tab" disabled title="Em breve">Entrega</button>
     </nav>
     <div class="grow"></div>
-    <div class="hist" role="group" aria-label="Histórico de ações">
+    <div class="group" role="group" aria-label="Histórico de ações">
       <button type="button" class="btn" data-act="undo" id="undo-top"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 0 12h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Desfazer</button>
       <button type="button" class="btn" data-act="redo" id="redo-top"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5 M20 9H10a6 6 0 0 0 0 12h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Refazer</button>
     </div>
-    <button type="button" class="btn" data-act="save" id="save" aria-disabled="true">Salvar projeto</button>
-    <label class="btn" for="proj">Abrir projeto</label>
-    <input id="proj" type="file" accept=".json,application/json" hidden>
-    <label class="btn solid" for="file">Abrir vídeo</label>
-    <input id="file" type="file" accept="video/*" hidden>
+    <div class="group" role="group" aria-label="Projeto">
+      <button type="button" class="btn" data-act="save" id="save" aria-disabled="true">Salvar projeto</button>
+      <button type="button" class="btn" data-act="open-project">Abrir projeto</button>
+    </div>
+    <button type="button" class="btn solid" data-act="add-files">Adicionar mídia</button>
   </header>
 
-  <main class="main">
-    <section class="card monitor" aria-label="Monitor">
-      <div class="monitor-bar">
-        <div class="seg" id="ratios" role="group" aria-label="Formato da prévia"></div>
-        <span class="muted" id="file-name">Nenhum vídeo aberto</span>
-      </div>
-      <div class="stage" id="stage">
-        <div class="frame" id="frame">
-          <video id="video" playsinline muted preload="auto"></video>
-          <div class="chip chip-r" id="scene-chip" hidden></div>
-        </div>
-        <div class="empty" id="empty">
-          <strong>Abra um vídeo pra começar</strong>
-          <span>O arquivo fica no teu computador. Nada é enviado.</span>
-        </div>
-      </div>
-      <div class="transport">
-        <span class="mono" id="timecode">00:00,0 <span class="muted">/ 00:00,0</span></span>
-        <div class="tbtns">
-          <button type="button" class="btn sq" data-act="step-back" aria-label="Voltar 0,1 s">◀︎</button>
-          <button type="button" class="btn sq solid wide" data-act="play" id="play" aria-label="Tocar">▶︎</button>
-          <button type="button" class="btn sq" data-act="step-fwd" aria-label="Avançar 0,1 s">▶︎</button>
-        </div>
-        <span class="muted" id="analysis"></span>
-      </div>
-    </section>
+  <main class="work">
+    <aside class="card material" id="material" aria-label="Material"></aside>
 
-    <section class="card detector" id="detector" aria-label="Detector de cenas"></section>
+    <div class="center">
+      <section class="card monitor" aria-label="Monitor">
+        <div class="monitor-bar">
+          <h2 class="tool">Monitor</h2>
+          <div class="seg" id="ratios" role="group" aria-label="Formato da prévia"></div>
+          <span class="muted ell" id="file-name">Nenhuma mídia aberta</span>
+        </div>
+        <div class="stage" id="stage">
+          <div class="frame" id="frame">
+            <video id="video" playsinline preload="auto"></video>
+            <img id="still" alt="Prévia da imagem" hidden>
+            <div class="audio-card" id="audio-card" hidden><strong>Áudio</strong><span id="audio-name"></span></div>
+            <div class="chip chip-r" id="scene-chip" hidden></div>
+          </div>
+          <div class="empty" id="empty">
+            <div class="empty-title">Comece pelo teu material</div>
+            <div class="empty-sub">Qualquer vídeo, áudio ou imagem. O arquivo fica no teu computador, nada é enviado.</div>
+            <div class="starts">
+              <button type="button" class="start" data-act="add-files"><b>Adicionar arquivos</b><span>Vídeo, áudio, imagem. Qualquer formato.</span></button>
+              <button type="button" class="start" data-act="add-folder"><b>Pasta do computador</b><span>Drive for Desktop ou qualquer pasta, com Falas, Cenas e Overlays.</span></button>
+              <button type="button" class="start" data-act="drive-connect"><b>Conectar Google Drive</b><span>Entra na tua conta e escolhe a pasta.</span></button>
+              <button type="button" class="start" data-act="drive-link"><b>Colar link do Drive</b><span>Link de uma pasta do Drive.</span></button>
+            </div>
+            <div class="empty-sub">Ou arraste arquivos e pastas pra qualquer lugar da tela.</div>
+          </div>
+        </div>
+        <div class="transport">
+          <span class="mono" id="timecode">00:00,0 <span class="muted">/ 00:00,0</span></span>
+          <div class="tbtns">
+            <button type="button" class="btn sq" data-act="step-back" aria-label="Voltar 0,1 s">◀︎</button>
+            <button type="button" class="btn sq solid wide" data-act="play" id="play" aria-label="Tocar">▶︎</button>
+            <button type="button" class="btn sq" data-act="step-fwd" aria-label="Avançar 0,1 s">▶︎</button>
+          </div>
+          <span class="muted ell" id="analysis" role="status"></span>
+        </div>
+      </section>
 
-    <section class="card timeline" aria-label="Timeline">
-      <div class="tl-head"><h2>Timeline</h2><span class="muted" id="tl-meta"></span></div>
-      <div class="tl-body" id="timeline"></div>
-    </section>
+      <section class="card detector" id="detector" aria-label="Detector de cenas"></section>
+
+      <section class="card timeline" aria-label="Timeline">
+        <div class="tl-head"><h2 class="tool">Timeline</h2><span class="muted" id="tl-meta"></span></div>
+        <div class="tl-body" id="timeline"></div>
+      </section>
+    </div>
   </main>
 </div>
+
+<input id="file" type="file" multiple hidden>
+<input id="dir" type="file" webkitdirectory multiple hidden>
+<input id="proj" type="file" accept=".json,application/json" hidden>
+<a id="dl" hidden></a>
+
+<dialog id="drive-dlg" aria-label="Google Drive"></dialog>
+
+<div class="drop" id="drop" hidden><div>Solte aqui pra adicionar ao Material</div></div>
+
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

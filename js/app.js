@@ -2,14 +2,23 @@ import { History } from './history.js';
 import * as P from './project.js';
 import { candidates, selectCuts, SENS_LABELS, DEFAULT_SENS } from './detect.js';
 import { sampleVideo } from './sampler.js';
-
-const PROJECT_ERR = 'Não consegui abrir o projeto: ';
+import { Library } from './library.js';
+import { KIND_LABEL, ROLES, fmtSize, downloadName, parseDriveLink } from './media.js';
+import { probe, convert } from './convert.js';
+import { entriesFromFiles, entriesFromDrop, canPickFolder, pickFolder } from './sources.js';
+import * as Drive from './drive.js';
 
 const $ = (s) => document.querySelector(s);
 const video = $('#video');
+const still = $('#still');
+const PROJECT_ERR = 'Não consegui abrir o projeto: ';
 
 const app = {
+  lib: new Library(),
+  activeId: null,
+  view: null, // 'video' | 'audio' | 'image' | null
   name: '',
+  size: 0,
   url: '',
   duration: 0,
   cands: [],
@@ -20,19 +29,21 @@ const app = {
   busy: false,
   abort: null,
   error: '',
-  size: 0,
-  pending: null // projeto aberto, esperando o vídeo
+  notice: '',
+  pending: null, // projeto aberto, esperando o vídeo
+  drive: { token: null, stack: [], list: [], msg: '', link: '', busy: false }
 };
 
 // ---------- utilitários ----------
 const p2 = (n) => String(n).padStart(2, '0');
 const fmtT = (t) => { const tt = Math.round(t * 10); return p2(Math.floor(tt / 600)) + ':' + p2(Math.floor((tt % 600) / 10)) + ',' + (tt % 10); };
 const dsec = (a, b) => (Math.round((b - a) * 10) / 10).toFixed(1).replace('.', ',') + ' s';
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const state = () => app.hist && app.hist.current;
 const kOf = (ratio) => P.RATIOS.indexOf(ratio); // 0,1,2 reenquadram; 3 = original
 const N = (i) => 'C' + (i + 1);
 const dis = (ok) => (ok ? 'false' : 'true');
+const say = (t) => { $('#analysis').textContent = t; $('#analysis').title = t; };
 
 function commit(label, scenes, { sens, key } = {}) {
   const cur = state();
@@ -45,6 +56,168 @@ function seek(t) {
   app.ph = P.r1(tt);
   video.currentTime = tt;
   sync(true);
+}
+
+// ---------- material ----------
+const TAG = { video: 'VÍD', audio: 'ÁUD', image: 'IMG', other: 'ARQ' };
+
+function statusText(it) {
+  switch (it.status) {
+    case 'verificando': return 'verificando formato…';
+    case 'baixando': return 'baixando do Drive ' + Math.round(it.progress * 100) + '%';
+    case 'convertendo': return 'convertendo pra MP4 ' + Math.round(it.progress * 100) + '%';
+    case 'pronto': return 'toca direto';
+    case 'convertido': return 'convertido pra MP4 (original intacto)';
+    case 'erro': return it.note || 'erro';
+    default: return '';
+  }
+}
+
+let rafMat = 0;
+const renderMaterialSoon = () => { if (!rafMat) rafMat = requestAnimationFrame(() => { rafMat = 0; renderMaterial(); }); };
+
+function renderMaterial() {
+  const el = $('#material');
+  const prev = el.querySelector('.m-list');
+  const top = prev ? prev.scrollTop : 0;
+  const lib = app.lib;
+  const g = lib.byRole();
+  const c = lib.counts();
+  const plural = (n, a, b) => n + ' ' + (n > 1 ? b : a);
+  const sum = [c.video && plural(c.video, 'vídeo', 'vídeos'), c.audio && plural(c.audio, 'áudio', 'áudios'), c.image && plural(c.image, 'imagem', 'imagens'), c.other && plural(c.other, 'outro', 'outros')].filter(Boolean).join(' · ');
+  const row = (it) => {
+    const st = statusText(it);
+    const busy = it.status === 'convertendo' || it.status === 'baixando';
+    const canOpen = it.kind !== 'other';
+    return `<div class="m-row${it.id === app.activeId ? ' on' : ''}">
+      <span class="m-tag" title="${KIND_LABEL[it.kind]}">${TAG[it.kind]}</span>
+      <div class="m-info"><div class="m-name ell" title="${esc(it.path)}">${esc(it.name)}</div>
+        <div class="m-meta${it.status === 'erro' ? ' err' : ''}">${fmtSize(it.size)}${st ? ' · ' + esc(st) : ''}</div>
+        ${busy ? `<div class="bar"><i style="width:${Math.round(it.progress * 100)}%"></i></div>` : ''}</div>
+      <div class="m-acts">
+        ${canOpen ? `<button type="button" class="btn sm" data-act="open" data-id="${it.id}">Abrir</button>` : ''}
+        <button type="button" class="btn sm" data-act="download" data-id="${it.id}" title="Baixar o arquivo original">Baixar</button>
+        ${it.converted ? `<button type="button" class="btn sm" data-act="download-mp4" data-id="${it.id}" title="Baixar a versão convertida">MP4</button>` : ''}
+      </div></div>`;
+  };
+  const groups = ROLES.filter((r) => g[r].length).map((r) => `<div class="m-role">${r}<span>${g[r].length}</span></div>${g[r].map(row).join('')}`).join('');
+  el.innerHTML = `
+    <div class="m-head"><h2 class="tool">Material</h2><span class="pill">${lib.items.length} ${lib.items.length === 1 ? 'arquivo' : 'arquivos'}</span></div>
+    <div class="m-src">
+      <button type="button" class="btn" data-act="add-files">Arquivos</button>
+      <button type="button" class="btn" data-act="add-folder">Pasta</button>
+      <button type="button" class="btn" data-act="drive-connect">Google Drive</button>
+      <button type="button" class="btn" data-act="drive-link">Link do Drive</button>
+    </div>
+    <div class="m-sum">${sum || 'Nada adicionado ainda. Qualquer tipo de arquivo entra.'}</div>
+    <div class="m-list">${groups || '<div class="m-empty">Use os botões acima ou arraste arquivos e pastas pra cá. Pastas com nomes Falas, Cenas e Overlays são separadas sozinhas.</div>'}</div>`;
+  const list = el.querySelector('.m-list');
+  if (list) list.scrollTop = top;
+}
+
+async function getFile(it) {
+  if (it.file) return it.file;
+  if (it.handle) { it.file = await it.handle.getFile(); return it.file; }
+  if (it.driveId) {
+    if (!app.drive.token) throw new Error('Conecte o Drive de novo pra baixar este arquivo.');
+    it.status = 'baixando';
+    it.progress = 0;
+    renderMaterialSoon();
+    it.file = await Drive.downloadFile(app.drive.token, it.driveId, it.name, '', (p) => { it.progress = p; renderMaterialSoon(); });
+    it.status = 'novo';
+    return it.file;
+  }
+  throw new Error('Arquivo indisponível.');
+}
+
+// O navegador toca? Se não, o decodificador universal converte pra MP4 H.264 (o original não é tocado).
+async function ensurePlayable(it, file) {
+  if (it.play) return it.play;
+  it.status = 'verificando';
+  renderMaterialSoon();
+  const r = await probe(file, it.kind);
+  if (r.ok) {
+    it.play = file;
+    it.duration = r.duration || 0;
+    it.status = 'pronto';
+    renderMaterialSoon();
+    return it.play;
+  }
+  it.status = 'convertendo';
+  it.progress = 0;
+  say('Esse formato o navegador não toca direto. Convertendo pra MP4…');
+  renderMaterialSoon();
+  try {
+    it.converted = await convert(file, it.kind, (p) => { it.progress = p; renderMaterialSoon(); });
+  } catch (e) {
+    it.status = 'erro';
+    it.note = 'não consegui converter (' + e.message + ')';
+    renderMaterialSoon();
+    throw new Error(it.note);
+  }
+  it.play = it.converted;
+  it.status = 'convertido';
+  renderMaterialSoon();
+  return it.play;
+}
+
+function setView(v) {
+  app.view = v;
+  $('#frame').classList.toggle('on', !!v);
+  $('#empty').style.display = v ? 'none' : '';
+  video.style.display = v === 'video' ? 'block' : 'none';
+  still.style.display = v === 'image' ? 'block' : 'none';
+  $('#audio-card').style.display = v === 'audio' ? 'flex' : 'none';
+}
+
+function resetEditor(keepNotice) {
+  if (app.abort) { app.abort.abort(); app.abort = null; }
+  video.pause();
+  Object.assign(app, { duration: 0, cands: [], hist: null, ph: 0, idx: -1, busy: false, error: '', notice: keepNotice ? app.notice : '' });
+}
+
+async function openItem(id) {
+  const it = app.lib.get(id);
+  if (!it || it.kind === 'other') return;
+  app.activeId = id;
+  $('#file-name').textContent = it.name;
+  renderMaterial();
+  try {
+    const file = await getFile(it);
+    if (app.activeId !== id) return;
+    if (it.kind === 'image') {
+      resetEditor();
+      if (app.url) URL.revokeObjectURL(app.url);
+      app.url = URL.createObjectURL(file);
+      still.src = app.url;
+      app.notice = 'Imagem aberta. O detector de cenas é só pra vídeo.';
+      setView('image');
+      say('');
+      render();
+      return;
+    }
+    const play = await ensurePlayable(it, file);
+    if (app.activeId !== id) return;
+    if (it.kind === 'audio') {
+      resetEditor();
+      if (app.url) URL.revokeObjectURL(app.url);
+      app.url = URL.createObjectURL(play);
+      video.src = app.url;
+      $('#audio-name').textContent = it.name;
+      app.notice = 'Áudio aberto. O detector de cenas é só pra vídeo.';
+      setView('audio');
+      say('');
+      render();
+      return;
+    }
+    await loadVideo(play, it);
+  } catch (e) {
+    it.status = it.status === 'erro' ? 'erro' : 'erro';
+    it.note = it.note || e.message;
+    app.error = 'Não consegui abrir "' + it.name + '": ' + e.message;
+    say(app.error);
+    render();
+  }
 }
 
 // ---------- monitor ----------
@@ -83,8 +256,9 @@ function renderDetector() {
   const st = state();
   const h = app.hist;
   if (!st) {
-    el.innerHTML = `<div class="d-head"><h2>Detector de cenas</h2><span class="pill">${app.busy ? 'analisando' : 'sem vídeo'}</span></div>
-      <div class="muted">${esc(app.error) || (app.busy ? 'Lendo o vídeo e procurando os cortes…' : 'Abra um vídeo pra o Workbench achar os cortes de cena.')}</div>`;
+    const msg = app.error || app.notice || (app.busy ? 'Lendo o vídeo e procurando os cortes…' : 'Abra um vídeo pra o Workbench achar os cortes de cena.');
+    el.innerHTML = `<div class="d-head"><h2 class="tool">Detector de cenas</h2><span class="pill">${app.busy ? 'analisando' : 'sem vídeo'}</span></div>
+      <div class="muted">${esc(msg)}</div>`;
     return;
   }
   const { scenes, sens } = st;
@@ -108,7 +282,7 @@ function renderDetector() {
   }).join('');
   el.innerHTML = `
     <div class="d-head">
-      <h2>Detector de cenas</h2>
+      <h2 class="tool">Detector de cenas</h2>
       <span class="pill">${scenes.length} cenas</span>
       <div class="sens">
         <span class="muted" style="font-size:11px;font-weight:600">Sensibilidade</span>
@@ -150,7 +324,7 @@ function tickStep(d) {
 function renderTimeline() {
   const el = $('#timeline');
   const st = state();
-  if (!st) { el.innerHTML = '<div class="tl-empty">A timeline aparece quando o vídeo for aberto.</div>'; $('#tl-meta').textContent = ''; return; }
+  if (!st) { el.innerHTML = '<div class="tl-empty">A timeline aparece quando um vídeo for aberto.</div>'; $('#tl-meta').textContent = ''; return; }
   const D = app.duration;
   const pc = (t) => (t / D * 100).toFixed(3) + '%';
   const i = P.sceneAt(st.scenes, app.ph);
@@ -204,22 +378,21 @@ function timecode() {
 // chamado quando o playhead mexe; só redesenha o pesado se a cena mudou
 function sync(force) {
   const st = state();
-  if (!st) return;
   if (!force) app.ph = P.r1(video.currentTime);
+  if (!st) { timecode(); return; }
   const i = P.sceneAt(st.scenes, app.ph);
   if (i !== app.idx || force) { render(); return; }
   syncPlayhead();
   timecode();
 }
 
-async function load(file) {
+async function loadVideo(play, it) {
   if (app.abort) app.abort.abort();
   if (app.url) URL.revokeObjectURL(app.url);
   const ctl = new AbortController();
-  Object.assign(app, { name: file.name, size: file.size, url: URL.createObjectURL(file), duration: 0, cands: [], hist: null, ph: 0, idx: -1, busy: true, abort: ctl, error: '' });
-  $('#file-name').textContent = file.name;
-  $('#empty').style.display = 'none';
-  $('#frame').classList.add('on');
+  Object.assign(app, { name: it.name, size: it.size, url: URL.createObjectURL(play), duration: 0, cands: [], hist: null, ph: 0, idx: -1, busy: true, abort: ctl, error: '', notice: '' });
+  $('#file-name').textContent = it.name;
+  setView('video');
   video.src = app.url;
   const pending = app.pending;
   let mismatch = false;
@@ -234,59 +407,201 @@ async function load(file) {
         app.ratio = pending.ratio;
         app.hist = new History({ scenes: pending.scenes, sens: pending.sens }, 'Projeto aberto');
         renderRatios();
-        $('#analysis').textContent = 'Projeto aberto: ' + pending.scenes.length + ' cenas';
+        say('Projeto aberto: ' + pending.scenes.length + ' cenas');
         return;
       }
       mismatch = true;
     }
     const { duration, series } = await sampleVideo(app.url, {
       signal: ctl.signal,
-      onProgress: (p) => { $('#analysis').textContent = 'Analisando ' + Math.round(p * 100) + '%'; }
+      onProgress: (p) => say('Analisando ' + Math.round(p * 100) + '%')
     });
     app.duration = duration;
     app.cands = candidates(series);
     const scenes = P.scenesFromCuts(selectCuts(app.cands, DEFAULT_SENS, duration), duration);
     app.hist = new History({ scenes, sens: DEFAULT_SENS }, 'Detecção automática');
-    $('#analysis').textContent = (mismatch ? 'Duração diferente do projeto, analisei do zero. ' : '') + app.cands.length + ' pontos de corte achados';
+    say((mismatch ? 'Duração diferente do projeto, analisei do zero. ' : '') + app.cands.length + ' pontos de corte achados');
   } catch (e) {
     if (e.name === 'AbortError') return;
-    app.error = 'Não consegui analisar este vídeo (' + e.message + '). Tenta um MP4 H.264.';
-    $('#analysis').textContent = '';
+    app.error = 'Não consegui analisar este vídeo (' + e.message + ').';
+    say(app.error);
   } finally {
     if (app.abort === ctl) { app.busy = false; app.abort = null; }
     render();
   }
 }
 
-function saveProject() {
-  const st = state();
-  if (!st) return;
-  const txt = P.serializeProject({ video: { name: app.name, size: app.size, duration: app.duration }, sens: st.sens, ratio: app.ratio, scenes: st.scenes, cands: app.cands });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([txt], { type: 'application/json' }));
-  a.download = 'workbench_' + app.name.replace(/\.[^.]+$/, '') + '_' + new Date().toISOString().slice(0, 10) + '.json';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  $('#analysis').textContent = 'Projeto salvo.';
+// ---------- entrada de mídia ----------
+function addEntries(entries) {
+  const ok = entries.filter((e) => e && e.name && !e.name.startsWith('.'));
+  if (!ok.length) { say('Nenhum arquivo encontrado.'); return; }
+  const before = app.lib.items.length;
+  const added = ok.map((e) => app.lib.add(e));
+  const fresh = app.lib.items.length - before;
+  renderMaterial();
+  say(fresh + (fresh === 1 ? ' arquivo adicionado.' : ' arquivos adicionados.'));
+  if (!app.activeId) {
+    const first = added.find((i) => i.kind === 'video') || added.find((i) => i.kind !== 'other');
+    if (first) openItem(first.id);
+  }
 }
 
-async function openProject(file) {
-  const r = P.parseProject(await file.text());
-  if (!r.ok) { $('#analysis').textContent = PROJECT_ERR + r.error; return; }
-  app.pending = r.project;
-  $('#analysis').textContent = 'Projeto lido. Agora abra o vídeo "' + r.project.video.name + '".';
+async function addFolder() {
+  if (canPickFolder()) {
+    try {
+      const r = await pickFolder();
+      addEntries(r.entries);
+    } catch (e) {
+      if (e.name !== 'AbortError') say('Não consegui abrir a pasta: ' + e.message);
+    }
+  } else {
+    $('#dir').click(); // Safari/Firefox: seletor de pasta comum
+  }
+}
+
+async function downloadItem(id, converted) {
+  const it = app.lib.get(id);
+  if (!it) return;
+  try {
+    const blob = converted ? it.converted : await getFile(it);
+    if (!blob) return;
+    const a = $('#dl');
+    a.href = URL.createObjectURL(blob);
+    a.download = converted ? downloadName(it.name, it.kind === 'audio' ? '_convertido.m4a' : '_convertido.mp4') : downloadName(it.name);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (e) {
+    say('Não consegui baixar: ' + e.message);
+  }
+}
+
+// ---------- Google Drive ----------
+const dlg = $('#drive-dlg');
+const readVal = (id) => { const e = document.getElementById(id); return e ? e.value : null; };
+
+function renderDrive() {
+  const d = app.drive;
+  const cid = readVal('g-cid') != null ? readVal('g-cid') : (localStorage.getItem('wb.gClientId') || '');
+  const link = readVal('g-link') != null ? readVal('g-link') : d.link;
+  const here = d.stack[d.stack.length - 1];
+  const crumb = d.stack.map((s) => esc(s.name)).join(' / ');
+  const browser = d.token && here ? `
+    <div class="crumb">${crumb}</div>
+    <div class="list">${d.list.length ? d.list.map((f) => `<div class="li">${f.isFolder
+      ? `<button type="button" data-act="drive-cd" data-id="${esc(f.id)}" data-name="${esc(f.name)}">📁 ${esc(f.name)}</button>`
+      : `<span class="ell">${esc(f.name)}</span>`}<span class="muted">${f.isFolder ? '' : fmtSize(f.size)}</span></div>`).join('') : '<div class="li muted">Pasta vazia.</div>'}</div>` : '';
+  dlg.innerHTML = `<div class="dlg">
+    <h2>Google Drive</h2>
+    <div class="muted">Acesso só de leitura. Os arquivos só são baixados pro teu navegador quando você abre ou baixa um deles.</div>
+    <label for="g-cid">ID do cliente Google (OAuth)</label>
+    <input id="g-cid" type="text" value="${esc(cid)}" placeholder="123456-abc.apps.googleusercontent.com" autocomplete="off">
+    <label for="g-link">Link da pasta (opcional, vazio mostra o Meu Drive)</label>
+    <input id="g-link" type="text" value="${esc(link)}" placeholder="https://drive.google.com/drive/folders/..." autocomplete="off">
+    ${browser}
+    <div class="note" role="status">${esc(d.busy ? 'Aguarde…' : d.msg)}</div>
+    <div class="row2">
+      <button type="button" class="btn" data-act="drive-close">Fechar</button>
+      ${d.token && here && d.stack.length > 1 ? '<button type="button" class="btn" data-act="drive-up">Voltar</button>' : ''}
+      ${d.token && here ? '<button type="button" class="btn solid" data-act="drive-import">Importar esta pasta</button>' : ''}
+      <button type="button" class="btn ${d.token && here ? '' : 'solid'}" data-act="drive-go">${d.token ? 'Listar' : 'Conectar'}</button>
+    </div></div>`;
+}
+
+function openDrive(mode) {
+  app.drive.msg = '';
+  renderDrive();
+  if (!dlg.open) dlg.showModal();
+  const f = document.getElementById(mode === 'link' ? 'g-link' : 'g-cid');
+  if (f && !f.value) f.focus();
+}
+
+async function driveGo() {
+  const d = app.drive;
+  const cid = (readVal('g-cid') || '').trim();
+  d.link = (readVal('g-link') || '').trim();
+  if (!cid) {
+    d.msg = 'Falta o ID do cliente Google. Crie no Google Cloud (APIs e serviços > Credenciais > ID do cliente OAuth, tipo "App da Web") e coloque este endereço do site como origem autorizada. O passo a passo está no README.';
+    renderDrive();
+    return;
+  }
+  localStorage.setItem('wb.gClientId', cid);
+  let id = 'root';
+  if (d.link) {
+    id = parseDriveLink(d.link);
+    if (!id) { d.msg = 'Não entendi esse link. Cole o link de uma pasta do Drive.'; renderDrive(); return; }
+  }
+  d.busy = true; d.msg = ''; renderDrive();
+  try {
+    if (!d.token) d.token = await Drive.getToken(cid);
+    d.stack = [{ id, name: await Drive.folderName(d.token, id) }];
+    d.list = await Drive.listChildren(d.token, id);
+    d.msg = d.list.length + ' itens nesta pasta.';
+  } catch (e) {
+    d.token = null; d.stack = []; d.list = [];
+    d.msg = e.message;
+  }
+  d.busy = false;
+  renderDrive();
+}
+
+async function driveCd(id, name) {
+  const d = app.drive;
+  d.busy = true; renderDrive();
+  try {
+    d.list = await Drive.listChildren(d.token, id);
+    d.stack.push({ id, name });
+    d.msg = d.list.length + ' itens nesta pasta.';
+  } catch (e) { d.msg = e.message; }
+  d.busy = false;
+  renderDrive();
+}
+
+async function driveUp() {
+  const d = app.drive;
+  if (d.stack.length < 2) return;
+  d.stack.pop();
+  const here = d.stack[d.stack.length - 1];
+  d.busy = true; renderDrive();
+  try { d.list = await Drive.listChildren(d.token, here.id); d.msg = ''; } catch (e) { d.msg = e.message; }
+  d.busy = false;
+  renderDrive();
+}
+
+async function driveImport() {
+  const d = app.drive;
+  const here = d.stack[d.stack.length - 1];
+  d.busy = true; d.msg = 'Listando tudo dentro da pasta…'; renderDrive();
+  try {
+    const entries = await Drive.listTree(d.token, here.id, here.name + '/');
+    d.busy = false;
+    dlg.close();
+    addEntries(entries);
+  } catch (e) {
+    d.busy = false; d.msg = e.message; renderDrive();
+  }
 }
 
 // ---------- ações ----------
 const actions = {
+  'add-files'() { $('#file').click(); },
+  'add-folder'() { addFolder(); },
+  'open-project'() { $('#proj').click(); },
+  'drive-connect'() { openDrive('connect'); },
+  'drive-link'() { openDrive('link'); },
+  'drive-close'() { dlg.close(); },
+  'drive-go'() { driveGo(); },
+  'drive-cd'(el) { driveCd(el.dataset.id, el.dataset.name); },
+  'drive-up'() { driveUp(); },
+  'drive-import'() { driveImport(); },
+  open(el) { openItem(el.dataset.id); },
+  download(el) { downloadItem(el.dataset.id, false); },
+  'download-mp4'(el) { downloadItem(el.dataset.id, true); },
   undo() { if (app.hist && app.hist.undo()) render(); },
   redo() { if (app.hist && app.hist.redo()) render(); },
   save() { saveProject(); },
-  play() { if (video.paused) video.play(); else video.pause(); },
-  'step-back'() { seek(app.ph - 0.1); },
-  'step-fwd'() { seek(app.ph + 0.1); },
+  play() { if (app.view && (video.paused)) video.play(); else video.pause(); },
+  'step-back'() { if (app.view) seek(app.ph - 0.1); },
+  'step-fwd'() { if (app.view) seek(app.ph + 0.1); },
   ratio(el) { app.ratio = el.dataset.v; renderRatios(); render(); },
   pick(el) { const s = state().scenes[+el.dataset.i]; seek((s.a + s.b) / 2); },
   split() {
@@ -328,6 +643,25 @@ function setSens(d) {
   commit('Sensibilidade: ' + SENS_LABELS[ns], P.scenesFromCuts(selectCuts(app.cands, ns, app.duration), app.duration), { sens: ns });
 }
 
+function saveProject() {
+  const st = state();
+  if (!st) return;
+  const txt = P.serializeProject({ video: { name: app.name, size: app.size, duration: app.duration }, sens: st.sens, ratio: app.ratio, scenes: st.scenes, cands: app.cands });
+  const a = $('#dl');
+  a.href = URL.createObjectURL(new Blob([txt], { type: 'application/json' }));
+  a.download = 'workbench_' + app.name.replace(/\.[^.]+$/, '') + '_' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  say('Projeto salvo.');
+}
+
+async function openProject(file) {
+  const r = P.parseProject(await file.text());
+  if (!r.ok) { say(PROJECT_ERR + r.error); return; }
+  app.pending = r.project;
+  say('Projeto lido. Agora abra o vídeo "' + r.project.video.name + '" no Material.');
+}
+
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
   if (el) {
@@ -358,11 +692,33 @@ document.addEventListener('change', (e) => {
   if (e.target.dataset.act === 'offset' && app.hist) { app.hist.seal(); render(); }
 });
 
-$('#proj').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) openProject(f); e.target.value = ''; });
-$('#file').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) load(f); e.target.value = ''; });
+// entradas de arquivo
+$('#file').addEventListener('change', (e) => { const l = [...e.target.files]; e.target.value = ''; if (l.length) addEntries(entriesFromFiles(l)); });
+$('#dir').addEventListener('change', (e) => { const l = [...e.target.files]; e.target.value = ''; if (l.length) addEntries(entriesFromFiles(l)); });
+$('#proj').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) openProject(f); });
+
+// arrastar e soltar (arquivos e pastas) em qualquer lugar da tela
+let dragDepth = 0;
+const hasFiles = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+window.addEventListener('dragenter', (e) => { if (hasFiles(e)) { dragDepth++; $('#drop').hidden = false; } });
+window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener('dragleave', (e) => { if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; $('#drop').hidden = true; } });
+window.addEventListener('drop', async (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  $('#drop').hidden = true;
+  try { addEntries(await entriesFromDrop(e.dataTransfer)); } catch (err) { say('Não consegui ler o que foi solto: ' + err.message); }
+});
+
+video.addEventListener('loadedmetadata', () => { if (app.view === 'audio' && Number.isFinite(video.duration)) { app.duration = video.duration; timecode(); } });
 video.addEventListener('timeupdate', () => sync(false));
 video.addEventListener('play', () => { $('#play').textContent = '❚❚'; });
 video.addEventListener('pause', () => { $('#play').textContent = '▶︎'; });
 
+// pra testes e depuração
+window.__wb = { app, addEntries, openItem };
+
 renderRatios();
+renderMaterial();
 render();
