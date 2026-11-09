@@ -26,6 +26,9 @@
       <button type="button" class="btn" data-act="undo" id="undo-top"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 0 12h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Desfazer</button>
       <button type="button" class="btn" data-act="redo" id="redo-top"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5 M20 9H10a6 6 0 0 0 0 12h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Refazer</button>
     </div>
+    <button type="button" class="btn" data-act="save" id="save" aria-disabled="true">Salvar projeto</button>
+    <label class="btn" for="proj">Abrir projeto</label>
+    <input id="proj" type="file" accept=".json,application/json" hidden>
     <label class="btn solid" for="file">Abrir vídeo</label>
     <input id="file" type="file" accept="video/*" hidden>
   </header>

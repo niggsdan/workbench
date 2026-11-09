@@ -62,3 +62,32 @@ test('modo gira Rosto -> Centro -> Manual -> Rosto e offset fica entre 0 e 100',
   assert.equal(P.setOffset(s, 0, 0, 500)[0].ox[0], 100);
   assert.equal(P.setOffset(s, 0, 0, -9)[0].ox[0], 0);
 });
+
+test('salvar e abrir projeto devolve o mesmo estado', () => {
+  let scenes = P.scenesFromCuts([10, 20], 30);
+  scenes = P.cycleMode(scenes, 1, 2);
+  scenes = P.setOffset(scenes, 1, 2, 70);
+  const txt = P.serializeProject({ video: { name: 'a.mp4', size: 123, duration: 30 }, sens: 3, ratio: '1:1', scenes, cands: [{ t: 10, score: 0.9 }] });
+  const r = P.parseProject(txt);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.project.scenes, scenes);
+  assert.equal(r.project.sens, 3);
+  assert.equal(r.project.ratio, '1:1');
+  assert.equal(r.project.video.name, 'a.mp4');
+  assert.deepEqual(r.project.cands, [{ t: 10, score: 0.9 }]);
+});
+
+test('abrir projeto recusa arquivo ruim com mensagem clara', () => {
+  const ok = JSON.parse(P.serializeProject({ video: { name: 'a.mp4', size: 1, duration: 30 }, sens: 2, ratio: '9:16', scenes: P.scenesFromCuts([10], 30), cands: [] }));
+  const bad = (mut) => { const c = JSON.parse(JSON.stringify(ok)); mut(c); return P.parseProject(JSON.stringify(c)); };
+  assert.equal(P.parseProject('{nao é json').ok, false);
+  assert.equal(P.parseProject('{"app":"outro"}').ok, false);
+  assert.equal(bad((c) => { c.version = 99; }).ok, false);
+  assert.equal(bad((c) => { c.sens = 9; }).ok, false);
+  assert.equal(bad((c) => { c.scenes[1].a = 12; }).ok, false); // buraco entre cenas
+  assert.equal(bad((c) => { c.scenes[0].m = [0, 0, 7]; }).ok, false);
+  assert.equal(bad((c) => { c.scenes[0].ox = [50, 150, 50]; }).ok, false);
+  assert.equal(bad((c) => { c.scenes = []; }).ok, false);
+  assert.equal(bad((c) => { c.video.duration = 100; }).ok, false); // cenas não cobrem o vídeo
+  assert.equal(bad((c) => { c.ratio = 'xx'; }).project.ratio, '9:16'); // ratio ruim vira padrão
+});

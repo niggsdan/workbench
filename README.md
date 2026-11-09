@@ -3,7 +3,7 @@
 Editor de vídeo integrado, direto no navegador. O vídeo fica no teu computador, nada é enviado.
 
 ## Onde está
-Primeira versão da tela **Editar**: abrir vídeo, **detector de cenas**, controle de cena em todos os formatos (9:16, 1:1, 4:5, 16:9), timeline e **Desfazer / Refazer em botão** (sem atalho de teclado).
+Primeira versão da tela **Editar**: abrir vídeo, **salvar e abrir projeto (.json)**, **detector de cenas**, controle de cena em todos os formatos (9:16, 1:1, 4:5, 16:9), timeline e **Desfazer / Refazer em botão** (sem atalho de teclado).
 
 ## Rodar
 Não precisa de build. Sirva a pasta com qualquer servidor estático e abra no Chrome ou Edge:
@@ -23,7 +23,7 @@ Cobrem as operações de cena, o histórico e a lógica do detector (Node 20+, s
 ## Como está organizado
 | Arquivo | O que faz |
 |---|---|
-| `js/project.js` | Operações puras de cena: dividir, juntar, mover corte, modo de enquadramento |
+| `js/project.js` | Operações puras de cena (dividir, juntar, mover corte, modo de enquadramento) e salvar/validar projeto |
 | `js/history.js` | Pilha de Desfazer/Refazer (60 passos, gesto contínuo vira um passo só) |
 | `js/detect.js` | Nota de cada corte e escolha por sensibilidade (mexer na sensibilidade não reanalisa o vídeo) |
 | `js/sampler.js` | Lê o vídeo no navegador e mede a diferença entre quadros |
@@ -34,10 +34,10 @@ Cobrem as operações de cena, o histórico e a lógica do detector (Node 20+, s
 - "Rosto" ainda enquadra no centro. Detecção de rosto entra depois; "Manual" já funciona.
 - Os limiares de sensibilidade foram calibrados só com vídeo de teste. Precisam ser ajustados com material real.
 - Vídeo longo demora pra analisar (o passo de amostragem cresce com a duração).
-- Ainda não salva o projeto (`project.json`) nem exporta.
+- O projeto salvo guarda as cenas, enquadramentos e sensibilidade, mas não o vídeo: ao abrir, você escolhe o vídeo de novo (se a duração não bater, ele reanalisa).
+- Ainda não exporta.
 
 ## Próximos passos
-1. Salvar e abrir `project.json`.
-2. Refino do corte quadro a quadro e análise mais rápida (WebCodecs + Worker).
-3. Proxies leves pra edição sem lag.
-4. Material (Drive e pasta local), transcrição, Auto-FX, aba Cor, export MP4/MOV.
+1. Refino do corte quadro a quadro e análise mais rápida (WebCodecs + Worker).
+2. Proxies leves pra edição sem lag (só se a prévia travar com material pesado).
+3. Material (Drive e pasta local), transcrição, Auto-FX, aba Cor, export MP4/MOV.

@@ -3,6 +3,8 @@ import * as P from './project.js';
 import { candidates, selectCuts, SENS_LABELS, DEFAULT_SENS } from './detect.js';
 import { sampleVideo } from './sampler.js';
 
+const PROJECT_ERR = 'Não consegui abrir o projeto: ';
+
 const $ = (s) => document.querySelector(s);
 const video = $('#video');
 
@@ -17,7 +19,9 @@ const app = {
   idx: -1,
   busy: false,
   abort: null,
-  error: ''
+  error: '',
+  size: 0,
+  pending: null // projeto aberto, esperando o vídeo
 };
 
 // ---------- utilitários ----------
@@ -174,6 +178,7 @@ function syncPlayhead() {
 // ---------- geral ----------
 function renderHeader() {
   const h = app.hist;
+  $('#save').setAttribute('aria-disabled', dis(!!h));
   for (const [id, ok, label, what] of [['#undo-top', h && h.canUndo, h && h.undoLabel, 'Desfazer'], ['#redo-top', h && h.canRedo, h && h.redoLabel, 'Refazer']]) {
     const b = $(id);
     b.setAttribute('aria-disabled', dis(ok));
@@ -211,13 +216,29 @@ async function load(file) {
   if (app.abort) app.abort.abort();
   if (app.url) URL.revokeObjectURL(app.url);
   const ctl = new AbortController();
-  Object.assign(app, { name: file.name, url: URL.createObjectURL(file), duration: 0, cands: [], hist: null, ph: 0, idx: -1, busy: true, abort: ctl, error: '' });
+  Object.assign(app, { name: file.name, size: file.size, url: URL.createObjectURL(file), duration: 0, cands: [], hist: null, ph: 0, idx: -1, busy: true, abort: ctl, error: '' });
   $('#file-name').textContent = file.name;
   $('#empty').style.display = 'none';
   $('#frame').classList.add('on');
   video.src = app.url;
+  const pending = app.pending;
+  let mismatch = false;
+  app.pending = null;
   render();
   try {
+    if (pending) {
+      await new Promise((r) => { if (video.readyState >= 1) r(); else video.addEventListener('loadedmetadata', r, { once: true }); });
+      if (Math.abs(video.duration - pending.video.duration) <= 0.5) {
+        app.duration = video.duration;
+        app.cands = pending.cands;
+        app.ratio = pending.ratio;
+        app.hist = new History({ scenes: pending.scenes, sens: pending.sens }, 'Projeto aberto');
+        renderRatios();
+        $('#analysis').textContent = 'Projeto aberto: ' + pending.scenes.length + ' cenas';
+        return;
+      }
+      mismatch = true;
+    }
     const { duration, series } = await sampleVideo(app.url, {
       signal: ctl.signal,
       onProgress: (p) => { $('#analysis').textContent = 'Analisando ' + Math.round(p * 100) + '%'; }
@@ -226,21 +247,43 @@ async function load(file) {
     app.cands = candidates(series);
     const scenes = P.scenesFromCuts(selectCuts(app.cands, DEFAULT_SENS, duration), duration);
     app.hist = new History({ scenes, sens: DEFAULT_SENS }, 'Detecção automática');
-    $('#analysis').textContent = app.cands.length + ' pontos de corte achados';
+    $('#analysis').textContent = (mismatch ? 'Duração diferente do projeto, analisei do zero. ' : '') + app.cands.length + ' pontos de corte achados';
   } catch (e) {
     if (e.name === 'AbortError') return;
     app.error = 'Não consegui analisar este vídeo (' + e.message + '). Tenta um MP4 H.264.';
     $('#analysis').textContent = '';
   } finally {
     if (app.abort === ctl) { app.busy = false; app.abort = null; }
+    render();
   }
-  render();
+}
+
+function saveProject() {
+  const st = state();
+  if (!st) return;
+  const txt = P.serializeProject({ video: { name: app.name, size: app.size, duration: app.duration }, sens: st.sens, ratio: app.ratio, scenes: st.scenes, cands: app.cands });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([txt], { type: 'application/json' }));
+  a.download = 'workbench_' + app.name.replace(/\.[^.]+$/, '') + '_' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  $('#analysis').textContent = 'Projeto salvo.';
+}
+
+async function openProject(file) {
+  const r = P.parseProject(await file.text());
+  if (!r.ok) { $('#analysis').textContent = PROJECT_ERR + r.error; return; }
+  app.pending = r.project;
+  $('#analysis').textContent = 'Projeto lido. Agora abra o vídeo "' + r.project.video.name + '".';
 }
 
 // ---------- ações ----------
 const actions = {
   undo() { if (app.hist && app.hist.undo()) render(); },
   redo() { if (app.hist && app.hist.redo()) render(); },
+  save() { saveProject(); },
   play() { if (video.paused) video.play(); else video.pause(); },
   'step-back'() { seek(app.ph - 0.1); },
   'step-fwd'() { seek(app.ph + 0.1); },
@@ -315,6 +358,7 @@ document.addEventListener('change', (e) => {
   if (e.target.dataset.act === 'offset' && app.hist) { app.hist.seal(); render(); }
 });
 
+$('#proj').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) openProject(f); e.target.value = ''; });
 $('#file').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) load(f); e.target.value = ''; });
 video.addEventListener('timeupdate', () => sync(false));
 video.addEventListener('play', () => { $('#play').textContent = '❚❚'; });
