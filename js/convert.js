@@ -98,3 +98,29 @@ async function run(file, kind, onProgress) {
     await f.deleteDir(dir).catch(() => {});
   }
 }
+
+// Roda o ffmpeg num arquivo qualquer. args(dentro, saida) devolve a lista de argumentos.
+export function ffmpegExec(blob, inName, args, outName, mime, onProgress) {
+  const job = chain.then(async () => {
+    const f = await getFFmpeg();
+    const dir = '/x' + Date.now().toString(36);
+    const logs = [];
+    const onLog = ({ message }) => { logs.push(message); if (logs.length > 8) logs.shift(); };
+    const onProg = ({ progress }) => { if (onProgress && progress >= 0 && progress <= 1) onProgress(progress); };
+    f.on('log', onLog); f.on('progress', onProg);
+    try {
+      await f.createDir(dir).catch(() => {});
+      await f.mount('WORKERFS', { files: [new File([blob], inName)] }, dir);
+      const code = await f.exec(args(dir + '/' + inName, outName));
+      if (code !== 0) throw new Error('o ffmpeg falhou: ' + logs.slice(-3).join(' | '));
+      const data = await f.readFile(outName);
+      await f.deleteFile(outName).catch(() => {});
+      return new Blob([data.buffer], { type: mime });
+    } finally {
+      f.off('log', onLog); f.off('progress', onProg);
+      await f.unmount(dir).catch(() => {}); await f.deleteDir(dir).catch(() => {});
+    }
+  });
+  chain = job.catch(() => {});
+  return job;
+}

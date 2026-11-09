@@ -76,13 +76,15 @@ export function setOffset(scenes, i, k, v) {
 }
 
 // ---------- salvar / abrir projeto ----------
+import { sanitizeEdit } from './model.js';
+
 export const PROJECT_VERSION = 1;
 
-export function serializeProject({ video, sens, ratio, scenes, cands }) {
+export function serializeProject({ video, sens, ratio, scenes, cands, edit }) {
   return JSON.stringify({
     app: 'workbench', version: PROJECT_VERSION, savedAt: new Date().toISOString(),
     video: { name: video.name, size: video.size, duration: video.duration },
-    sens, ratio, scenes, cands
+    sens, ratio, scenes, cands, edit: edit || undefined
   }, null, 2);
 }
 
@@ -111,6 +113,6 @@ export function parseProject(text) {
   return { ok: true, project: {
     video: { name: v.name, size: num(v.size) ? v.size : 0, duration: v.duration },
     sens: j.sens, ratio: RATIOS.includes(j.ratio) ? j.ratio : '9:16',
-    scenes: j.scenes.map((s) => newScene(s.a, s.b, s.m, s.ox)), cands
+    scenes: j.scenes.map((s) => newScene(s.a, s.b, s.m, s.ox)), cands, edit: sanitizeEdit(j.edit)
   } };
 }

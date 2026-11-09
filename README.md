@@ -3,10 +3,27 @@
 Editor de vídeo integrado, direto no navegador. O vídeo fica no teu computador, nada é enviado.
 
 ## Onde está
-Tela **Editar**:
-- **Material**: adicione qualquer tipo de arquivo (vídeo, áudio, imagem, outros) por **Arquivos**, **Pasta**, **Google Drive**, **Link do Drive** ou arrastando pra tela. Pastas chamadas Falas, Cenas e Overlays são separadas sozinhas. Todo arquivo tem **Baixar**.
-- **Decodificador universal**: se o navegador não toca o formato (ProRes, AVI, MXF, WMV, HEVC sem suporte...), o ffmpeg dentro do navegador converte pra um MP4 leve, só pra prévia e análise. O original fica intacto e a versão convertida também pode ser baixada.
-- **Detector de cenas**, controle por formato (9:16, 1:1, 4:5, 16:9), timeline, **Desfazer / Refazer em botão** e **salvar/abrir projeto (.json)**.
+Três áreas navegáveis no topo, como no preview aprovado:
+
+**Editar**
+- Rail de ferramentas: Briefing, Transcrição, Cortes, Reenquadrar, Tarja, Legendas, Motion, Sons, Cor e Auto-FX. Cada ícone leva pra parte certa ou executa a ação.
+- **Material** em árvore (Falas, Cenas, Overlays, Outros) com Drive, link da pasta, upload, pasta do computador e arrastar/soltar. Qualquer tipo de arquivo entra e tem download. O decodificador universal (ffmpeg.wasm) converte o que o navegador não toca.
+- **Efeitos**: Técnicas (Whip pan, Speed ramp, Flash cut, Zoom, Freeze frame, Jump cut, Split screen, Dolly), Cinema (referências com link pro Film Grab, Flim e Movies in Color) e Textura (Super 8, 16 mm, 35 mm, VHS, grão, poeira, halation, light leak, vinheta, overlay).
+- **Monitor** com prévia real de efeitos, cor e textura, plataformas (YouTube, TikTok, Instagram), formatos 9:16, 1:1, 4:5 e 16:9, e paleta da cena atual × referência.
+- **Detector de cenas**, **Auto-FX** (sugere efeitos nos cortes mais fortes, texturas pelo estilo e sons, com o motivo de cada um) e **timeline** por faixas: ideias, cortes, FX, textura, overlay, texto, SFX, grade por cena, cenas, vídeo e áudio. Itens arrastáveis, com Lâmina e Ímã.
+- **Inspetor** com motivo, parâmetros, keyframes, som do efeito, receita, e Aceitar, Trocar e Apagar.
+
+**Cor**
+- Grade de verdade por grupo de cenas (G1…Gn, agrupados por cor automaticamente) e grade geral por cima.
+- Nós em série, em paralelo e camadas: Primária (rodas lift, gamma, gain e offset, contraste, pivô, temperatura, matiz, saturação, realces e sombras), Curvas, Pele e Céu por qualificador, e Halation.
+- Visualizador com Atual, Referência e Dividir; waveform, vectorscope e histograma; álbum de stills; paleta; importação e exportação de LUT .cube; copiar e colar grade.
+
+**Entrega**
+- Destinos por plataforma com formato e corte (vídeo inteiro, por ideia ou por cena).
+- Render de verdade no navegador, com o mesmo desenho da prévia, em MP4 ou MOV (H.264 + AAC), em 720p, 1080p ou 1440p.
+- XML (Premiere e DaVinci Resolve), EDL, créditos e projeto Workbench.
+
+O projeto salva sozinho neste navegador e pode ser retomado na tela inicial. Salvar projeto baixa o .json e você continua editando.
 
 ## Rodar
 Não precisa de build. Sirva a pasta com qualquer servidor estático e abra no Chrome ou Edge:
@@ -55,7 +72,9 @@ Sem login, dá pra baixar o arquivo do Drive no computador e adicioná-lo por **
 - Limiares de sensibilidade calibrados só com vídeo de teste.
 - Vídeo longo demora pra analisar.
 - O projeto salvo não guarda o vídeo: ao abrir, você escolhe o vídeo de novo.
-- Ainda não exporta.
+- O render é em tempo real (1 min de vídeo leva cerca de 1 min por arquivo, mais a conversão). A aba precisa ficar aberta e na frente.
+- A transcrição ainda não está nesta versão: a faixa A1 está reservada, e as ideias são marcadas à mão.
+- "Rosto" ainda enquadra no centro.
 
 ## Próximos passos
 1. Transcrição e cortes por ideia/plataforma, Auto-FX, aba Cor, export MP4/MOV.

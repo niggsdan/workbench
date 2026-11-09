@@ -18,79 +18,130 @@
       <span class="brand-name">Workbench</span>
     </div>
     <nav class="tabs" aria-label="Áreas de trabalho">
-      <button type="button" class="tab on" aria-current="page">Editar</button>
-      <button type="button" class="tab" disabled title="Em breve">Cor</button>
-      <button type="button" class="tab" disabled title="Em breve">Entrega</button>
+      <button type="button" class="tab on" data-act="tab" data-v="editar" aria-current="page">Editar</button>
+      <button type="button" class="tab" data-act="tab" data-v="cor">Cor</button>
+      <button type="button" class="tab" data-act="tab" data-v="entrega">Entrega</button>
     </nav>
     <div class="grow"></div>
     <div class="group" role="group" aria-label="Histórico de ações">
       <button type="button" class="btn" data-act="undo" id="undo-top"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 0 12h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Desfazer</button>
       <button type="button" class="btn" data-act="redo" id="redo-top"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5 M20 9H10a6 6 0 0 0 0 12h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Refazer</button>
     </div>
-    <div class="group" role="group" aria-label="Projeto">
-      <button type="button" class="btn" data-act="save" id="save" aria-disabled="true">Salvar projeto</button>
-      <button type="button" class="btn" data-act="open-project">Abrir projeto</button>
+    <button type="button" class="proj-pill" id="proj-pill" data-act="project-menu" title="Projeto: salvar, abrir, briefing"></button>
+    <div class="group" role="group" aria-label="Entrega">
+      <div class="seg" id="container" role="group" aria-label="Formato do arquivo"><button type="button" data-act="container" data-v="mp4">MP4</button><button type="button" data-act="container" data-v="mov">MOV</button></div>
+      <button type="button" class="btn pill solid" data-act="export" id="export-top">Exportar</button>
+      <button type="button" class="btn pill" data-act="pack">Premiere · AE · CapCut</button>
     </div>
-    <button type="button" class="btn solid" data-act="add-files">Adicionar mídia</button>
+    <div class="avatar" id="avatar" aria-hidden="true">D</div>
   </header>
 
-  <main class="work">
-    <aside class="card material" id="material" aria-label="Material"></aside>
+  <div class="body">
 
-    <div class="center">
-      <section class="card monitor" aria-label="Monitor">
-        <div class="monitor-bar">
-          <h2 class="tool">Monitor</h2>
-          <div class="seg" id="ratios" role="group" aria-label="Formato da prévia"></div>
-          <span class="muted ell" id="file-name">Nenhuma mídia aberta</span>
+    <!-- ===================== EDITAR ===================== -->
+    <section class="view v-editar" id="view-editar">
+      <div class="col-left">
+        <nav class="rail" id="rail" aria-label="Ferramentas"></nav>
+        <div class="stack">
+          <aside class="card panel" id="material" aria-label="Material"></aside>
+          <aside class="card panel" id="efeitos" aria-label="Efeitos"></aside>
         </div>
-        <div class="stage" id="stage">
-          <div class="frame" id="frame">
-            <video id="video" playsinline preload="auto"></video>
-            <img id="still" alt="Prévia da imagem" hidden>
-            <div class="audio-card" id="audio-card" hidden><strong>Áudio</strong><span id="audio-name"></span></div>
-            <div class="chip chip-r" id="scene-chip" hidden></div>
-          </div>
-          <div class="empty" id="empty">
-            <div class="empty-title">Comece pelo teu material</div>
-            <div class="empty-sub">Qualquer vídeo, áudio ou imagem. O arquivo fica no teu computador, nada é enviado.</div>
-            <div class="starts">
-              <button type="button" class="start" data-act="add-files"><b>Adicionar arquivos</b><span>Vídeo, áudio, imagem. Qualquer formato.</span></button>
-              <button type="button" class="start" data-act="add-folder"><b>Pasta do computador</b><span>Drive for Desktop ou qualquer pasta, com Falas, Cenas e Overlays.</span></button>
-              <button type="button" class="start" data-act="drive-connect"><b>Conectar Google Drive</b><span>Entra na tua conta e escolhe a pasta.</span></button>
-              <button type="button" class="start" data-act="drive-link"><b>Colar link do Drive</b><span>Link de uma pasta do Drive.</span></button>
+      </div>
+
+      <div class="col-center">
+        <section class="card monitor" id="monitor" aria-label="Monitor">
+          <div class="mon-top">
+            <div class="seg" id="plats" role="group" aria-label="Plataforma"></div>
+            <div class="mon-top-r">
+              <button type="button" class="btn sm style-pill" id="style-pill" data-act="style-open"></button>
+              <div class="seg sm" id="ratios" role="group" aria-label="Formato da prévia"></div>
             </div>
-            <div class="empty-sub">Ou arraste arquivos e pastas pra qualquer lugar da tela.</div>
           </div>
-        </div>
-        <div class="transport">
-          <span class="mono" id="timecode">00:00,0 <span class="muted">/ 00:00,0</span></span>
-          <div class="tbtns">
-            <button type="button" class="btn sq" data-act="step-back" aria-label="Voltar 0,1 s">◀︎</button>
-            <button type="button" class="btn sq solid wide" data-act="play" id="play" aria-label="Tocar">▶︎</button>
-            <button type="button" class="btn sq" data-act="step-fwd" aria-label="Avançar 0,1 s">▶︎</button>
+          <div class="mon-mid">
+            <div class="stage" id="stage">
+              <div class="frame" id="frame">
+                <canvas id="cv-mon" aria-label="Prévia do vídeo com efeitos e cor"></canvas>
+                <div class="chip chip-l" id="fx-chip" hidden></div>
+                <div class="chip chip-r" id="scene-chip" hidden></div>
+                <div class="audio-card" id="audio-card" hidden><strong>Áudio</strong><span id="audio-name"></span></div>
+              </div>
+              <div class="empty" id="empty">
+                <div class="empty-title">Comece pelo teu material</div>
+                <div class="empty-sub">Qualquer vídeo, áudio ou imagem. O arquivo fica no teu computador, nada é enviado.</div>
+                <div class="starts">
+                  <button type="button" class="start" data-act="add-files"><b>Adicionar arquivos</b><span>Vídeo, áudio, imagem. Qualquer formato.</span></button>
+                  <button type="button" class="start" data-act="add-folder"><b>Pasta do computador</b><span>Drive for Desktop ou qualquer pasta, com Falas, Cenas e Overlays.</span></button>
+                  <button type="button" class="start" data-act="drive-connect"><b>Conectar Google Drive</b><span>Entra na tua conta e escolhe a pasta.</span></button>
+                  <button type="button" class="start" data-act="drive-link"><b>Colar link do Drive</b><span>Link de uma pasta do Drive.</span></button>
+                </div>
+                <div id="resume"></div>
+                <div class="empty-sub">Ou arraste arquivos e pastas pra qualquer lugar da tela.</div>
+              </div>
+            </div>
+            <aside class="pal" id="pal" aria-label="Paleta"></aside>
           </div>
-          <span class="muted ell" id="analysis" role="status"></span>
+          <div class="transport">
+            <span class="mono" id="timecode">00:00,0 <span class="muted">/ 00:00,0</span></span>
+            <div class="tbtns">
+              <button type="button" class="btn sq" data-act="step-back" aria-label="Voltar 0,1 s"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M7 6v12 M19 6l-9 6 9 6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
+              <button type="button" class="btn sq solid wide" data-act="play" id="play" aria-label="Tocar"></button>
+              <button type="button" class="btn sq" data-act="step-fwd" aria-label="Avançar 0,1 s"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M17 6v12 M5 6l9 6-9 6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
+            </div>
+            <div class="mon-right"><span class="muted ell" id="analysis" role="status"></span><button type="button" class="link-btn" id="fxprev" data-act="fxprev" aria-pressed="true">Prévia com efeitos e cor</button></div>
+          </div>
+        </section>
+
+        <section class="card detector" id="detector" aria-label="Detector de cenas"></section>
+        <section class="card autofx" id="autofx" aria-label="Sugestões automáticas"></section>
+        <section class="card timeline" id="tl-card" aria-label="Timeline"></section>
+      </div>
+
+      <aside class="col-right"><div class="card inspector" id="inspector" aria-label="Inspetor"></div></aside>
+    </section>
+
+    <!-- ===================== COR ===================== -->
+    <section class="view v-cor" id="view-cor" hidden>
+      <div class="col-left cor-left">
+        <aside class="card panel" id="c-album" aria-label="Álbum de stills"></aside>
+        <aside class="card panel" id="c-pal" aria-label="Paleta"></aside>
+        <aside class="card panel" id="c-luts" aria-label="LUTs"></aside>
+      </div>
+      <div class="col-center">
+        <div class="cor-mid">
+          <section class="card viewer" id="c-viewer" aria-label="Visualizador"></section>
+          <div class="scopes" id="c-scopes"></div>
         </div>
-      </section>
+        <section class="card nodes" id="c-nodes" aria-label="Nós"></section>
+        <section class="card shots" id="c-shots" aria-label="Grades por grupo de cenas"></section>
+      </div>
+      <aside class="col-right"><div class="card inspector" id="c-insp" aria-label="Inspetor de cor"></div></aside>
+    </section>
 
-      <section class="card detector" id="detector" aria-label="Detector de cenas"></section>
-
-      <section class="card timeline" aria-label="Timeline">
-        <div class="tl-head"><h2 class="tool">Timeline</h2><span class="muted" id="tl-meta"></span></div>
-        <div class="tl-body" id="timeline"></div>
-      </section>
-    </div>
-  </main>
+    <!-- ===================== ENTREGA ===================== -->
+    <section class="view v-entrega" id="view-entrega" hidden>
+      <div class="col-left"><aside class="card panel" id="e-dest" aria-label="Destinos"></aside></div>
+      <div class="col-center">
+        <section class="card e-prev" id="e-prev" aria-label="Prévia da entrega"></section>
+        <section class="card e-queue" id="e-queue" aria-label="Fila de render"></section>
+      </div>
+      <aside class="col-right"><div class="card inspector" id="e-opts" aria-label="Formato de saída"></div></aside>
+    </section>
+  </div>
 </div>
+
+<video id="video" playsinline preload="auto" hidden></video>
+<img id="still" alt="" hidden>
 
 <input id="file" type="file" multiple hidden>
 <input id="dir" type="file" webkitdirectory multiple hidden>
 <input id="proj" type="file" accept=".json,application/json" hidden>
+<input id="lut-file" type="file" accept=".cube" hidden>
+<input id="ref-file" type="file" accept="image/*" hidden>
 <a id="dl" hidden></a>
 
 <dialog id="drive-dlg" aria-label="Google Drive"></dialog>
-
+<dialog id="dlg" aria-label="Janela"></dialog>
+<div class="toast" id="toast" role="status" hidden></div>
 <div class="drop" id="drop" hidden><div>Solte aqui pra adicionar ao Material</div></div>
 
 <script type="module" src="js/app.js"></script>

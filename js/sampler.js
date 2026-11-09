@@ -37,13 +37,17 @@ export async function sampleVideo(src, { onProgress, signal } = {}) {
   c.width = W;
   c.height = H;
   const g = c.getContext('2d', { willReadFrequently: true });
+  let lastPx = null;
   const gray = () => {
     const px = g.getImageData(0, 0, W, H).data;
+    lastPx = px;
     const out = new Uint8Array(W * H);
     for (let i = 0, j = 0; i < px.length; i += 4, j++) out[j] = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) | 0;
     return out;
   };
   const series = [];
+  const thumbs = [];
+  let nextThumb = 0;
   let prev = null;
   try {
     for (let t = 0; t < duration; t = Math.round((t + step) * 1000) / 1000) {
@@ -51,6 +55,7 @@ export async function sampleVideo(src, { onProgress, signal } = {}) {
       await seek(v, Math.min(t, Math.max(0, duration - 0.05)));
       g.drawImage(v, 0, 0, W, H);
       const cur = gray();
+      if (t >= nextThumb) { thumbs.push({ t, w: W, h: H, rgba: new Uint8ClampedArray(lastPx) }); nextThumb = t + Math.max(0.5, step); }
       if (prev) series.push({ t, d: frameDiff(prev, cur) });
       prev = cur;
       if (onProgress) onProgress(Math.min(1, t / duration));
@@ -59,5 +64,5 @@ export async function sampleVideo(src, { onProgress, signal } = {}) {
     v.removeAttribute('src');
     v.load();
   }
-  return { duration, step, series };
+  return { duration, step, series, thumbs };
 }
