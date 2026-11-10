@@ -46,7 +46,7 @@ export function roleOfPath(path) {
 export function parseDriveLink(s) {
   const t = (s || '').trim();
   if (!t) return null;
-  let m = /\/folders\/([A-Za-z0-9_-]{10,})/.exec(t);
+  let m = /\/folders\/([A-Za-z0-9_-]{10,})/.exec(t) || /\/file\/d\/([A-Za-z0-9_-]{10,})/.exec(t) || /\/d\/([A-Za-z0-9_-]{20,})/.exec(t);
   if (m) return m[1];
   m = /[?&]id=([A-Za-z0-9_-]{10,})/.exec(t);
   if (m) return m[1];

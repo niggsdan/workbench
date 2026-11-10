@@ -55,18 +55,21 @@ Cobrem as operações de cena, o histórico e a lógica do detector (Node 20+, s
 | `js/app.js` | Tela e ligação de tudo |
 
 ## Google Drive
-O login do Google exige um **ID do cliente OAuth** seu (é gratuito e fica só no teu navegador):
-1. Em console.cloud.google.com crie um projeto e ative a **Google Drive API**.
-2. Em **APIs e serviços > Credenciais**, crie um **ID do cliente OAuth** do tipo **App da Web**.
-3. Em **Origens JavaScript autorizadas** coloque `https://niggsdan.github.io` (e `http://localhost:8000` pra testar).
-4. Na tela de consentimento, adicione teu e-mail como usuário de teste.
-5. No Workbench, **Google Drive** > cole o ID do cliente > **Conectar**. Só pede leitura (`drive.readonly`).
+**Só o link (pasta pública):** em **Colar link do Drive**, cole o link de uma pasta ou arquivo compartilhado como *Qualquer pessoa com o link*. O Workbench lê as subpastas (Falas, Cenas, Overlays), importa e abre o primeiro vídeo, sem login.
 
-Sem login, dá pra baixar o arquivo do Drive no computador e adicioná-lo por **Arquivos**/**Pasta** (o Drive for Desktop mostra o Drive como pasta).
+Isso precisa de uma chave de API do Google, configurada uma vez pro site todo:
+1. Em console.cloud.google.com, crie um projeto e ative a **Google Drive API**.
+2. Em **APIs e serviços › Credenciais › Criar credenciais › Chave de API**.
+3. Restrinja a chave: **Sites** `https://niggsdan.github.io/*` e **APIs** só a Google Drive API.
+4. Coloque a chave em `js/config.js` (vale pra todo mundo) ou cole no próprio diálogo (fica só no teu navegador).
+
+A chave não dá acesso a conta nenhuma: só lê o que já está público.
+
+**Pasta privada (login):** **Entrar com a conta Google** pede um ID do cliente OAuth (tipo App da Web, com `https://niggsdan.github.io` como origem autorizada) e lê só o que a tua conta enxerga, em modo leitura.
 
 ## Limites conhecidos
 - A conversão roda no navegador, sem aceleração de hardware: ProRes/4K/HEVC pesado demora (a prévia sai em 720p). Vídeos que o navegador já toca não passam por isso.
-- O login do Drive ainda não foi testado com um ID de cliente real.
+- O Drive (link público e login) ainda não foi testado com chave e ID reais, só com respostas simuladas.
 - A posição do corte tem margem de até ~0,1 s. Falta refino quadro a quadro.
 - "Rosto" ainda enquadra no centro; "Manual" funciona.
 - Limiares de sensibilidade calibrados só com vídeo de teste.

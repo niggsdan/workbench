@@ -36,9 +36,18 @@ export async function getToken(clientId) {
   });
 }
 
-async function api(token, url) {
-  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+// auth: o token do login (string) ou { key } pra pasta pública lida só pelo link.
+async function api(auth, url) {
+  const pub = auth && typeof auth === 'object' && auth.key;
+  const r = await fetch(pub ? url + (url.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(auth.key) : url, pub ? {} : { headers: { Authorization: 'Bearer ' + auth } });
   if (r.status === 401) throw new Error('Sessão do Drive expirou. Conecte de novo.');
+  if (pub && (r.status === 403 || r.status === 404)) {
+    const why = await r.text().catch(() => '');
+    if (/API key not valid|keyInvalid|API_KEY_INVALID/i.test(why)) throw new Error('A chave do Google não é válida.');
+    if (/has not been used|is disabled|accessNotConfigured|SERVICE_DISABLED/i.test(why)) throw new Error('A Google Drive API não está ativada no projeto da chave.');
+    if (/referer|referrer/i.test(why)) throw new Error('A chave não aceita este endereço. Confira as restrições de site da chave.');
+    throw new Error('NAO_PUBLICO');
+  }
   if (r.status === 403) throw new Error('Sem permissão nessa pasta ou limite do Google atingido.');
   if (r.status === 404) throw new Error('Pasta não encontrada. Confira o link e se a conta tem acesso.');
   if (!r.ok) throw new Error('Erro do Drive (' + r.status + ').');
@@ -63,6 +72,13 @@ export async function listChildren(token, folderId) {
     pt = j.nextPageToken;
   } while (pt);
   return out.map((f) => ({ id: f.id, name: f.name, mime: f.mimeType, size: Number(f.size) || 0, isFolder: f.mimeType === FOLDER }));
+}
+
+// O que o link aponta: pasta ou arquivo, com nome.
+export async function meta(auth, id) {
+  const r = await api(auth, API + '/' + encodeURIComponent(id) + '?fields=id,name,mimeType,size&supportsAllDrives=true');
+  const f = await r.json();
+  return { id: f.id, name: f.name, mime: f.mimeType, size: Number(f.size) || 0, isFolder: f.mimeType === FOLDER };
 }
 
 export async function folderName(token, id) {

@@ -4,6 +4,8 @@ import { ROLES, downloadName, parseDriveLink, fmtSize } from './media.js';
 import { probe, convert } from './convert.js';
 import { entriesFromFiles, canPickFolder, pickFolder } from './sources.js';
 import * as Drive from './drive.js';
+import { GOOGLE_API_KEY } from './config.js';
+const apiKey = () => GOOGLE_API_KEY || localStorage.getItem('wb.gApiKey') || '';
 
 // ---------- árvore ----------
 const ROLE_DOT = { Falas: '#e6e7e9', Cenas: '#7b8088', Overlays: '#d9435e', Outros: '#565c64' };
@@ -58,9 +60,11 @@ async function getFile(it) {
   if (it.file) return it.file;
   if (it.handle) { it.file = await it.handle.getFile(); return it.file; }
   if (it.driveId) {
-    if (!app.drive.token) throw new Error('Conecte o Drive de novo pra baixar este arquivo.');
+    const auth = app.drive.token || (apiKey() ? { key: apiKey() } : null);
+    if (!auth) throw new Error('Conecte o Drive de novo pra baixar este arquivo.');
     it.status = 'baixando'; it.progress = 0; renderMaterialSoon();
-    it.file = await Drive.downloadFile(app.drive.token, it.driveId, it.name, '', (p) => { it.progress = p; renderMaterialSoon(); });
+    try { it.file = await Drive.downloadFile(auth, it.driveId, it.name, '', (p) => { it.progress = p; renderMaterialSoon(); }); }
+    catch (e) { it.status = 'erro'; throw new Error(e.message === 'NAO_PUBLICO' ? 'o arquivo não está compartilhado com "qualquer pessoa com o link"' : e.message); }
     it.status = 'novo';
     return it.file;
   }
@@ -160,6 +164,44 @@ function renderDrive() {
       ${d.token && here ? '<button type="button" class="btn solid" data-act="drive-import">Importar esta pasta</button>' : ''}
       <button type="button" class="btn ${d.token && here ? '' : 'solid'}" data-act="drive-go">${d.token ? 'Listar' : 'Conectar'}</button></div></div>`;
 }
+// ---------- só o link ----------
+const lk = { msg: '', busy: false, link: '', private: false };
+function renderLink() {
+  const key = apiKey(); const link = readVal('l-link') != null ? readVal('l-link') : lk.link;
+  dlg.innerHTML = `<div class="dlg"><h2>Colar link do Drive</h2>
+    <div class="muted" style="line-height:1.5">Cole o link de uma pasta ou de um arquivo. Se estiver compartilhado como <b>Qualquer pessoa com o link</b>, o Workbench importa direto, sem login. Falas, Cenas e Overlays são separados sozinhos.</div>
+    <input id="l-link" type="text" value="${esc(link)}" placeholder="https://drive.google.com/drive/folders/..." autocomplete="off">
+    <div class="note" role="status">${lk.busy ? 'Lendo a pasta no Drive…' : esc(lk.msg)}</div>
+    ${lk.private ? `<div class="box"><div class="r"><b>Essa pasta é privada</b></div><div class="note" style="margin-top:4px;line-height:1.5">No Drive: <b>Compartilhar › Acesso geral › Qualquer pessoa com o link</b> e cole de novo. Ou entre com a tua conta Google pra abrir pasta privada.</div></div>` : ''}
+    ${key ? '' : `<div class="box"><div class="r"><b>Falta uma configuração, feita uma vez só</b></div>
+      <div class="note" style="margin-top:4px;line-height:1.5">O site precisa de uma chave de API do Google pra ler pastas públicas: no <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener noreferrer">Google Cloud</a>, ative a <b>Google Drive API</b>, crie em <b>Credenciais › Chave de API</b> e restrinja a <b>niggsdan.github.io</b> e à Drive API. Ela não dá acesso à tua conta.</div>
+      <input id="l-key" type="text" placeholder="AIza..." autocomplete="off" style="margin-top:6px"></div>`}
+    <div class="row2"><button type="button" class="btn" data-act="drive-close">Fechar</button><button type="button" class="btn" data-act="drive-connect">Entrar com a conta Google</button><button type="button" class="btn solid" data-act="link-go" ${lk.busy ? 'aria-disabled="true"' : ''}>Importar</button></div></div>`;
+}
+function openLink() { lk.msg = ''; lk.private = false; renderLink(); if (!dlg.open) dlg.showModal(); const f = document.getElementById('l-link'); if (f) f.focus(); }
+async function linkGo() {
+  lk.link = (readVal('l-link') || '').trim(); const k = (readVal('l-key') || '').trim();
+  if (k) localStorage.setItem('wb.gApiKey', k);
+  const id = parseDriveLink(lk.link);
+  if (!id) { lk.msg = 'Não entendi esse link. Cole o link de uma pasta ou arquivo do Drive.'; renderLink(); return; }
+  if (!apiKey()) { lk.msg = 'Cole a chave do Google acima (é uma vez só).'; renderLink(); return; }
+  lk.busy = true; lk.msg = ''; lk.private = false; renderLink();
+  const auth = { key: apiKey() };
+  try {
+    const m = await Drive.meta(auth, id);
+    const entries = m.isFolder ? await Drive.listTree(auth, id, m.name + '/') : [{ name: m.name, path: m.name, size: m.size, mime: m.mime, driveId: m.id }];
+    lk.busy = false;
+    if (!entries.length) { lk.msg = 'A pasta está vazia (ou só tem documentos do Google, que não são mídia).'; renderLink(); return; }
+    dlg.close(); if (m.isFolder && !app.projectName) app.projectName = m.name;
+    addEntries(entries, 'drive');
+  } catch (e) {
+    lk.busy = false;
+    if (e.message === 'NAO_PUBLICO') { lk.private = true; app.drive.link = lk.link; }
+    else { lk.msg = e.message; if (/chave/i.test(e.message)) localStorage.removeItem('wb.gApiKey'); }
+    renderLink();
+  }
+}
+
 function openDrive(mode) {
   app.drive.msg = ''; renderDrive(); if (!dlg.open) dlg.showModal();
   const f = document.getElementById(mode === 'link' ? 'g-link' : 'g-cid'); if (f && !f.value) f.focus();
@@ -197,8 +239,9 @@ export const actions = {
   noop() {},
   'add-files'() { $('#file').click(); },
   'add-folder'() { addFolder(); },
-  'drive-connect'() { openDrive('connect'); },
-  'drive-link'() { openDrive('link'); },
+  'drive-connect'() { openDrive(app.drive.link ? 'link' : 'connect'); },
+  'drive-link'() { openLink(); },
+  'link-go'() { linkGo(); },
   'drive-close'() { dlg.close(); },
   'drive-go'() { driveGo(); },
   'drive-cd'(el) { driveCd(el.dataset.id, el.dataset.name); },
@@ -210,6 +253,7 @@ export const actions = {
 };
 
 export function bindInputs() {
+  dlg.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.target.id === 'l-link' || e.target.id === 'l-key')) { e.preventDefault(); linkGo(); } });
   $('#file').addEventListener('change', (e) => { const l = [...e.target.files]; e.target.value = ''; if (l.length) addEntries(entriesFromFiles(l), 'upload'); });
   $('#dir').addEventListener('change', (e) => { const l = [...e.target.files]; e.target.value = ''; if (l.length) addEntries(entriesFromFiles(l), 'pasta'); });
 }
