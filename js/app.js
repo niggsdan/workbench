@@ -169,9 +169,11 @@ function syncOverlays(t, playing) {
     if (!v) {
       if (ovPrep.has(f.lib)) continue; ovPrep.add(f.lib);
       const it = app.lib.get(f.lib); if (!it) continue;
+      if (it.kind === 'image') { Mat.fileOf(it).then((file) => { const im = new Image(); im.onload = () => { app.overlays.set(f.lib, im); app.dirty = true; }; im.src = URL.createObjectURL(file); }).catch(() => toast('Não consegui abrir a textura ' + it.name + '.')); continue; }
       Mat.prepareItem(it).then((blob) => { const el = document.createElement('video'); el.muted = true; el.loop = true; el.playsInline = true; el.src = URL.createObjectURL(blob); el.addEventListener('seeked', () => { app.dirty = true; }); app.overlays.set(f.lib, el); app.dirty = true; }).catch(() => toast('Não consegui preparar o overlay ' + it.name + '.'));
       continue;
     }
+    if (v instanceof HTMLImageElement) continue;
     const inside = t >= f.a && t < f.b;
     v.playbackRate = f.params.speed / 100;
     if (inside && playing) { if (v.paused) v.play().catch(() => {}); }
@@ -285,7 +287,7 @@ document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
   if (el) {
     if (el.getAttribute('aria-disabled') === 'true' || el.disabled) return;
-    const a = el.dataset.act; if (['offset', 'param', 'cslider', 'sfx-vol', 'text', 'credit', 'credit-req', 'idea-name', 'dest-on', 'seg-text'].includes(a)) return;
+    const a = el.dataset.act; if (['offset', 'param', 'cslider', 'sfx-vol', 'text', 'credit', 'credit-req', 'idea-name', 'dest-on', 'seg-text', 'ref-field'].includes(a)) return;
     const fn = actions[a]; if (fn) { e.preventDefault(); fn(el); }
     return;
   }
@@ -311,6 +313,9 @@ window.addEventListener('drop', async (e) => {
   try { Mat.addEntries(await entriesFromDrop(e.dataTransfer), 'upload'); } catch (err) { say('Não consegui ler o que foi solto: ' + err.message); }
 });
 window.addEventListener('beforeunload', () => autosave());
+
+// altura do topo (ele quebra linha em tela estreita) pra tela caber inteira
+new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', $('.top').offsetHeight + 'px')).observe($('.top'));
 
 // pra testes e depuração
 window.__wb = { app, addEntries: Mat.addEntries, openItem: Mat.openItem, go, seek, st, edit, mutEdit };

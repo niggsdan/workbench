@@ -18,7 +18,7 @@ export function vecToPuck(v, k = 1) {
 }
 
 // ---------- modelo de grade ----------
-export const defaultPrim = () => ({ lift: [0, 0], gamma: [0, 0], gain: [0, 0], offset: [0, 0], contrast: 1, pivot: 0.435, temp: 0, tint: 0, sat: 100, hi: 0, sh: 0 });
+export const defaultPrim = () => ({ lift: [0, 0], gamma: [0, 0], gain: [0, 0], offset: [0, 0], liftY: 0, gammaY: 0, gainY: 0, offsetY: 0, contrast: 1, pivot: 0.435, temp: 0, tint: 0, sat: 100, hi: 0, sh: 0 });
 export const defaultCurve = () => [[0, 0], [0.25, 0.25], [0.5, 0.5], [0.75, 0.75], [1, 1]];
 export const defaultQual = (kind) => ({
   range: kind === 'ceu' ? { h: [190, 230], s: [18, 80], l: [45, 95] } : { h: [8, 28], s: [22, 70], l: [28, 82] },
@@ -33,6 +33,7 @@ export const newNode = (kind, extra = {}) => {
   if (kind === 'curve') Object.assign(base, { pts: defaultCurve() });
   if (kind === 'qual') Object.assign(base, defaultQual(extra.sub), { sub: extra.sub || 'pele' });
   if (kind === 'hala') Object.assign(base, defaultHala());
+  if (kind === 'pal') Object.assign(base, { src: extra.src || null, dst: extra.dst || null, amount: 1, bands: [1, 1, 1], sat: 0 });
   return Object.assign(base, extra.name ? { name: extra.name } : {});
 };
 
@@ -50,15 +51,16 @@ export const cloneGrade = clone;
 
 export function isNeutralPrim(p) {
   const z = (a) => !a[0] && !a[1];
-  return z(p.lift) && z(p.gamma) && z(p.gain) && z(p.offset) && p.contrast === 1 && !p.temp && !p.tint && p.sat === 100 && !p.hi && !p.sh;
+  return z(p.lift) && z(p.gamma) && z(p.gain) && z(p.offset) && !p.liftY && !p.gammaY && !p.gainY && !p.offsetY && p.contrast === 1 && !p.temp && !p.tint && p.sat === 100 && !p.hi && !p.sh;
 }
 
 // ---------- matemática por canal ----------
 function primFn(p, ch) {
-  const lift = puckToVec(p.lift, WHEEL_K.lift)[ch];
-  const gamma = puckToVec(p.gamma, WHEEL_K.gamma)[ch];
-  const gain = puckToVec(p.gain, WHEEL_K.gain)[ch];
-  const off = puckToVec(p.offset, WHEEL_K.offset)[ch];
+  // roda = cor (puck); master (Y) = luminância daquela faixa, como no Resolve
+  const lift = puckToVec(p.lift, WHEEL_K.lift)[ch] + (p.liftY || 0) * 0.25;
+  const gamma = puckToVec(p.gamma, WHEEL_K.gamma)[ch] + (p.gammaY || 0) * 0.6;
+  const gain = puckToVec(p.gain, WHEEL_K.gain)[ch] + (p.gainY || 0) * 0.6;
+  const off = puckToVec(p.offset, WHEEL_K.offset)[ch] + (p.offsetY || 0) * 0.2;
   const tempS = (p.temp / 1000) * 0.6;
   const tintS = (p.tint / 100) * 0.15;
   const mul = ch === 0 ? 1 + tempS + tintS * 0.5 : ch === 2 ? 1 - tempS + tintS * 0.5 : 1 - tintS;
@@ -198,6 +200,43 @@ function cubeStage(d, cube, amount = 1) {
   }
 }
 
+// ---------- paleta: leva as cores do teu material pras cores do filme ----------
+// Cada faixa (claros, médios, escuros) pareia as cores por luminância. A cor de cada pixel anda na direção da
+// diferença das cores parecidas dela, pesada pela distância. Vira uma LUT 3D, então é leve na prévia e no render.
+const lum8 = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+export function palTransfer(src, dst, { amount = 1, bands = [1, 1, 1], sat = 0 } = {}) {
+  const pairs = [0, 1, 2].map((b) => {
+    const s0 = (src[b] || []).map(hexToRgb).sort((x, y) => lum8(x) - lum8(y));
+    const d0 = (dst[b] || []).map(hexToRgb).sort((x, y) => lum8(x) - lum8(y));
+    const n = Math.min(s0.length, d0.length); const out = [];
+    for (let i = 0; i < n; i++) { const si = Math.round(i * (s0.length - 1) / Math.max(1, n - 1)); const di = Math.round(i * (d0.length - 1) / Math.max(1, n - 1)); out.push([s0[si], d0[di]]); }
+    return out;
+  });
+  return (r, g, b) => {
+    const l = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    const wL = smooth(0.45, 0.72, l); const wD = 1 - smooth(0.16, 0.42, l); const wM = Math.max(0, 1 - wL - wD);
+    const ws = [wL, wM, wD]; let dr = 0; let dg = 0; let db = 0;
+    for (let k = 0; k < 3; k++) {
+      const w = ws[k] * bands[k]; const P = pairs[k]; if (w < 1e-3 || !P.length) continue;
+      let sw = 0; let x = 0; let y = 0; let z = 0;
+      for (const [sc, dc] of P) { const d = (sc[0] - r) ** 2 + (sc[1] - g) ** 2 + (sc[2] - b) ** 2; const ww = 1 / (d + 400); sw += ww; x += ww * (dc[0] - sc[0]); y += ww * (dc[1] - sc[1]); z += ww * (dc[2] - sc[2]); }
+      dr += w * x / sw; dg += w * y / sw; db += w * z / sw;
+    }
+    let R = r + amount * dr; let Gg = g + amount * dg; let B = b + amount * db;
+    if (sat) { const L = 0.2126 * R + 0.7152 * Gg + 0.0722 * B; const k = 1 + sat / 100; R = L + (R - L) * k; Gg = L + (Gg - L) * k; B = L + (B - L) * k; }
+    return [R, Gg, B];
+  };
+}
+const palCache = new Map();
+function palCube(n) {
+  const key = JSON.stringify([n.src, n.dst, n.amount, n.bands, n.sat]);
+  let c = palCache.get(key); if (c) return c;
+  const f = palTransfer(n.src, n.dst, n); const S = 25; const t = new Float32Array(S * S * S * 3); let i = 0;
+  for (let bb = 0; bb < S; bb++) for (let gg = 0; gg < S; gg++) for (let rr = 0; rr < S; rr++) { const o = f(rr * 255 / (S - 1), gg * 255 / (S - 1), bb * 255 / (S - 1)); t[i++] = clamp(o[0] / 255); t[i++] = clamp(o[1] / 255); t[i++] = clamp(o[2] / 255); }
+  c = { size: S, table: t }; palCache.set(key, c); if (palCache.size > 30) palCache.delete(palCache.keys().next().value);
+  return c;
+}
+
 // ---------- compilar e aplicar ----------
 // cubes: { nomeDaLut: cube }. Devolve { stages, hala, neutral }.
 export function compileGrade(g, cubes = {}) {
@@ -219,6 +258,8 @@ export function compileGrade(g, cubes = {}) {
       if (!id) { const l = lutOf(curveFn(n.pts)); stages.push((d) => stageLUT(d, l, l, l)); }
     } else if (n.kind === 'hala') {
       if (n.amount > 0) hala.push({ amount: n.amount, radius: n.radius, thr: n.thr });
+    } else if (n.kind === 'pal') {
+      if (n.src && n.dst && n.amount > 0) { const cube = palCube(n); stages.push((d) => cubeStage(d, cube)); }
     }
   };
   g.serial.forEach(addNode);

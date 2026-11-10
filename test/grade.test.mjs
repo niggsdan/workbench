@@ -85,3 +85,15 @@ test('halation só acende perto das luzes', () => {
   const o = G.bloom({ data, w, h }, 0.6, 0.3);
   assert.ok(o[(8 * w + 8) * 4] > 10 && o[(8 * w + 8) * 4] > o[0]);
 });
+test('master da roda: lift Y levanta os pretos, gain Y abaixa as luzes', () => {
+  const g = G.defaultGrade(); g.serial[0].prim.liftY = 0.4; g.serial[0].prim.gainY = -0.3;
+  const d = run(g, new Uint8ClampedArray([5, 5, 5, 255, 240, 240, 240, 255]));
+  assert.ok(d[0] > 20, 'preto subiu'); assert.ok(d[4] < 230, 'luz desceu');
+});
+test('paleta: cor igual à do material vai pra cor do filme', () => {
+  const src = [['#e0e0e0'], ['#808080'], ['#202020']]; const dst = [['#f0d0a0'], ['#a06030'], ['#301808']];
+  const f = G.palTransfer(src, dst, { amount: 1 });
+  const m = f(128, 128, 128); assert.ok(m[0] > 140 && m[2] < 90, 'médio esquentou: ' + m.map(Math.round));
+  const g = G.defaultGrade(); g.serial.push(G.newNode('pal', { src, dst })); const d = run(g, px(128, 128, 128));
+  assert.ok(d[0] > d[2] + 30); g.serial[2].amount = 0; assert.deepEqual([...run(g, px(128, 128, 128))], [128, 128, 128, 255]);
+});

@@ -1,10 +1,16 @@
 // Tipos de mídia, papéis por pasta e leitura de link do Drive. Tudo puro (testável no Node).
 
 const EXT = {
-  video: ['mp4', 'm4v', 'mov', 'mkv', 'avi', 'webm', 'mxf', 'mts', 'm2ts', 'wmv', 'flv', '3gp', 'mpg', 'mpeg', 'ogv', 'vob', 'mpe', 'f4v', 'divx', 'asf'],
+  // lrf: prévia da DJI (Osmo, Mini, Action); lrv: prévia da GoPro; insv: Insta360; 360: GoPro Max; mts/m2ts: AVCHD (Panasonic, Sony)
+  video: ['mp4', 'm4v', 'mov', 'mkv', 'avi', 'webm', 'mxf', 'mts', 'm2ts', 'm2t', 'wmv', 'flv', '3gp', 'mpg', 'mpeg', 'ogv', 'vob', 'mpe', 'f4v', 'divx', 'asf', 'lrf', 'lrv', 'insv', '360', 'dv', 'hevc', 'h264', 'h265'],
   audio: ['mp3', 'wav', 'aac', 'm4a', 'flac', 'ogg', 'opus', 'aiff', 'aif', 'wma', 'caf', 'ac3'],
-  image: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif', 'svg', 'cr2', 'dng']
+  image: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif', 'svg', 'thm']
 };
+// RAW de câmera: o navegador não decodifica, mas todo RAW guarda uma prévia JPEG grande dentro.
+export const RAW_EXT = ['rw2', 'raw', 'orf', 'ori', 'cr2', 'cr3', 'crw', 'nef', 'nrw', 'arw', 'srf', 'sr2', 'raf', 'dng', 'pef', 'srw', 'x3f', '3fr', 'iiq', 'rwl', 'erf', 'kdc', 'mrw', 'mos', 'gpr'];
+EXT.image.push(...RAW_EXT);
+export const isRaw = (name) => RAW_EXT.includes(extOf(name));
+export const RAW_BRAND = { rw2: 'Panasonic Lumix', raw: 'Panasonic/Leica', orf: 'Olympus / OM System', ori: 'Olympus / OM System', cr2: 'Canon', cr3: 'Canon', crw: 'Canon', nef: 'Nikon', nrw: 'Nikon', arw: 'Sony', srf: 'Sony', sr2: 'Sony', raf: 'Fujifilm', dng: 'DNG', pef: 'Pentax', srw: 'Samsung', x3f: 'Sigma', '3fr': 'Hasselblad', iiq: 'Phase One', rwl: 'Leica', erf: 'Epson', kdc: 'Kodak', mrw: 'Minolta', mos: 'Leaf', gpr: 'GoPro' };
 export const KIND_LABEL = { video: 'Vídeo', audio: 'Áudio', image: 'Imagem', other: 'Outro' };
 
 export const extOf = (name) => { const m = /\.([^.\/\\]+)$/.exec(name || ''); return m ? m[1].toLowerCase() : ''; };

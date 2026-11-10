@@ -103,7 +103,7 @@ TECH.push(
 
 export const TEXKEYS = {
   grain: 'Grão', dust: 'Poeira e riscos', jitter: 'Tremida de projetor', flicker: 'Flicker', halation: 'Halation',
-  softness: 'Suavidade de lente', vignette: 'Vinheta', leak: 'Vazamento de luz', tracking: 'Tracking e ruído de fita', frame: 'Moldura de película', fade: 'Cor desbotada'
+  softness: 'Suavidade de lente', vignette: 'Vinheta', leak: 'Vazamento de luz', tracking: 'Tracking e ruído de fita', frame: 'Moldura de película', fade: 'Cor desbotada', paper: 'Papel', grunge: 'Grunge', scratch: 'Riscos de filme', burn: 'Queimado de filme', bokeh: 'Bokeh', halftone: 'Meio-tom'
 };
 export const TEXTURES = [
   { key: 'super8', name: 'SUPER 8', hint: 'Grão alto, tremida, poeira e flicker', badge: 'Preset', set: { grain: 62, dust: 40, jitter: 24, flicker: 18, halation: 30 },
@@ -114,6 +114,12 @@ export const TEXTURES = [
   { key: '16mm', name: '16 MM', hint: 'Grão médio, cor suave, leve tremida', badge: 'Preset', set: { grain: 45, softness: 15, jitter: 10, halation: 12 }, recipe: 'Grão médio, cor suave e uma tremida leve de quadro.' },
   { key: '35mm', name: '35 MM', hint: 'Grão fino e brilho nas luzes fortes', badge: 'Preset', set: { grain: 30, halation: 35, softness: 20, vignette: 25 }, recipe: 'Grão fino, brilho suave ao redor das luzes mais fortes e um pouco de suavidade de lente.' },
   { key: 'vhs', name: 'VHS', hint: 'Ruído de fita, borda mole e tracking', badge: 'Preset', set: { grain: 25, tracking: 55, softness: 45, flicker: 10 }, recipe: 'Faixas de tracking, ruído de fita e bordas moles.' },
+  { key: 'papel', name: 'PAPEL', hint: 'Fibra de papel mexendo, cara de impresso', badge: 'Animada', set: { paper: 55 }, recipe: 'Textura de papel gerada aqui, que muda de lugar a cada quadro como se fosse impressa e filmada.' },
+  { key: 'grunge', name: 'GRUNGE', hint: 'Manchas e sujeira que pulsam', badge: 'Animada', set: { grunge: 50 }, recipe: 'Manchas escuras irregulares, trocando a cada poucos quadros.' },
+  { key: 'riscos', name: 'RISCOS DE FILME', hint: 'Riscos fortes e fios de cabelo na película', badge: 'Animada', set: { scratch: 60, dust: 25 }, recipe: 'Riscos verticais que atravessam o quadro, fios e poeira, novos a cada quadro.' },
+  { key: 'queimado', name: 'QUEIMADO DE FILME', hint: 'Película queimando nas bordas', badge: 'Animada', set: { burn: 65 }, recipe: 'Manchas laranja e brancas que crescem das bordas, como filme queimando no projetor.' },
+  { key: 'bokeh', name: 'BOKEH', hint: 'Bolas de luz desfocadas passando', badge: 'Animada', set: { bokeh: 55 }, recipe: 'Círculos de luz desfocados flutuando devagar por cima da imagem.' },
+  { key: 'meiotom', name: 'MEIO-TOM', hint: 'Pontos de impressão, estilo jornal', badge: 'Animada', set: { halftone: 60 }, recipe: 'Transforma a imagem em pontos de impressão que acompanham o vídeo.' },
   { key: 'grao', name: 'GRÃO', hint: 'Ruído de filme, tamanho e intensidade', badge: 'Gerado', set: { grain: 50 }, recipe: 'Ruído de filme sobre a imagem inteira.' },
   { key: 'poeira', name: 'POEIRA E RISCOS', hint: 'Partículas e riscos aleatórios', badge: 'Gerado', set: { dust: 50 }, recipe: 'Partículas e riscos aleatórios, novos a cada quadro.' },
   { key: 'halation', name: 'HALATION', hint: 'Brilho avermelhado nas luzes', badge: 'Gerado', set: { halation: 50 }, recipe: 'Brilho avermelhado ao redor das luzes fortes.' },
@@ -127,6 +133,11 @@ export const PACKS_8MM = [
   { name: 'Dissolve', url: 'https://dissolve.com/goodies', what: 'Grão 8 mm filmado em película, em quatro intensidades. Grátis com cadastro.' },
   { name: 'Vecteezy', url: 'https://www.vecteezy.com/free-videos/8mm-film-overlay', what: 'Muitos overlays 8 mm. A versão grátis pede crédito ao autor.' }
 ];
+// Texturelabs: texturas grátis (uso comercial ok), mas a licença proíbe colocar dentro de app. Você baixa e põe na pasta Overlays.
+export const TEXTURELABS = [['Film', 681], ['Grunge', 663], ['Paper', 666], ['Lens Effects', 688], ['Atmosphere', 744], ['Details', 719], ['Ink/Paint', 669], ['Fabric', 675], ['Concrete', 693], ['Glass', 732], ['Water', 735], ['Metal', 697]].map(([name, ct]) => ({ name, url: 'https://texturelabs.org?ct=' + ct }));
+export const BLENDS = ['screen', 'overlay', 'multiply', 'soft-light'];
+export const BLEND_LABEL = ['Screen (clareia)', 'Overlay (contraste)', 'Multiplicar (escurece)', 'Luz suave'];
+export const ANIM_LABEL = ['parada', 'tremida de filme', 'deslizando'];
 export const OVERLAY = { key: 'overlay', name: 'OVERLAY', hint: 'Vídeo da tua biblioteca, com modo de mistura', badge: 'Arquivo' };
 
 export const CINEMA = [
@@ -168,7 +179,8 @@ export function newTexture(key, a, duration) {
     why: 'Adicionado por você.', auto: false, accepted: true };
 }
 export function newOverlay(libId, name, a, duration) {
-  return { id: newId(), kind: 'ov', key: 'overlay', name: 'OVERLAY', lib: libId, file: name, a: r2(a), b: r2(duration), params: { opacity: 60, scale: 100, speed: 100 }, kf: [], sfx: null,
+  const img = /\.(png|jpe?g|webp|gif|bmp|tiff?|avif)$/i.test(name);
+  return { id: newId(), kind: 'ov', key: 'overlay', name: img ? 'TEXTURA' : 'OVERLAY', lib: libId, file: name, a: r2(a), b: r2(duration), params: { opacity: img ? 45 : 60, scale: 100, speed: 100, blend: img ? 1 : 0, anim: img ? 1 : 0 }, kf: [], sfx: null,
     credit: { required: true, creator: '' }, why: 'Arquivo da tua pasta Overlays, em modo Screen e em loop sobre o vídeo.', auto: false, accepted: true };
 }
 export function newText(variant, a, duration) {
@@ -195,12 +207,15 @@ export function syncLen(item) {
 export const paramDefs = (item) => {
   if (item.kind === 'tec') return (techOf(item.key) || { params: [] }).params;
   if (item.kind === 'tx') return Object.keys(item.params).map((k) => ({ k, label: TEXKEYS[k] || k, min: 0, max: 100, def: 0, unit: '%' }));
-  if (item.kind === 'ov') return [{ k: 'opacity', label: 'Opacidade', min: 0, max: 100, def: 60, unit: '%' }, { k: 'scale', label: 'Escala', min: 50, max: 200, def: 100, unit: '%' }, { k: 'speed', label: 'Velocidade', min: 25, max: 300, def: 100, unit: '%' }];
+  if (item.kind === 'mk') return [{ k: 'feather', label: 'Borda suave', min: 0, max: 100, def: 25, unit: '%' }, { k: 'amount', label: item.key === 'blur' ? 'Desfoque' : 'Intensidade', min: 0, max: 100, def: 75, unit: '%' }];
+  if (item.kind === 'ov') return [{ k: 'opacity', label: 'Opacidade', min: 0, max: 100, def: 60, unit: '%' }, { k: 'blend', label: 'Mistura', min: 0, max: 3, def: 0, unit: 'blend' }, { k: 'anim', label: 'Movimento', min: 0, max: 2, def: 0, unit: 'anim' }, { k: 'scale', label: 'Escala', min: 50, max: 200, def: 100, unit: '%' }, { k: 'speed', label: 'Velocidade', min: 25, max: 300, def: 100, unit: '%' }];
   return [];
 };
 export const CURVES = ['linear', 'ease out', 'ease in-out', 'crash (rápido)'];
 export function fmtParam(def, v) {
   if (def.unit === 'dir') return DIRS[Math.round(v)] || '';
+  if (def.unit === 'blend') return BLEND_LABEL[Math.round(v)] || '';
+  if (def.unit === 'anim') return ANIM_LABEL[Math.round(v)] || '';
   if (def.unit === 'curve') return CURVES[Math.round(v)] || '';
   if (def.unit === '%') return Math.round(v) + '%';
   if (def.unit === '°') return Math.round(v) + '°';
@@ -217,11 +232,12 @@ export const recipeOf = (item) => {
   if (item.kind === 'tec' && (item.key === 'lang' || item.key === 'dolly')) return 'Marcador de linguagem: ' + (item.hint || 'câmera deslizando') + '. Não altera a imagem, é o lembrete de filmar ou montar esse trecho assim. A referência abre no Eyecandy.';
   if (item.kind === 'tec') { const t = techOf(item.key); return t ? t.recipe : ''; }
   if (item.kind === 'tx') { const t = texOf(item.key); return t ? t.recipe : ''; }
-  if (item.kind === 'ov') return 'Modo de mistura Screen, em loop, sobre o clipe de baixo. O arquivo vem da tua biblioteca e não fica no Workbench.';
+  if (item.kind === 'ov') return 'Arquivo da tua pasta Overlays por cima do vídeo, no modo de mistura escolhido' + (item.name === 'TEXTURA' ? ', com movimento quadro a quadro pra parecer filmado' : ', em loop') + '. O arquivo não fica no Workbench.';
+  if (item.kind === 'mk') return { mask: 'Escurece tudo fora da forma e isola o que está dentro.', blur: 'Desfoca o que está dentro da forma. Inverter desfoca o fundo e deixa a forma nítida.', crop: 'Corta tudo fora da forma (fica preto), com borda suave.', spot: 'Escurece em volta e dá uma luz quente no que está dentro.' }[item.key];
   if (item.kind === 'tt') return item.key === 'tarja' ? 'Barra com título e subtítulo no terço de baixo do quadro.' : 'Legenda centralizada no pé do quadro.';
   return 'Som sintetizado no navegador, sem arquivo.';
 };
-export const kindLabel = (item) => ({ tec: item.key === 'dolly' || item.key === 'lang' ? 'Marcador · linguagem' : 'Camada de ajuste · técnica', tx: 'Camada de ajuste · textura e lente', ov: 'Overlay em vídeo', tt: 'Texto', sx: 'Som avulso' }[item.kind]);
+export const kindLabel = (item) => ({ mk: 'Máscara no vídeo · keyframes', tec: item.key === 'dolly' || item.key === 'lang' ? 'Marcador · linguagem' : 'Camada de ajuste · técnica', tx: 'Camada de ajuste · textura e lente', ov: 'Overlay em vídeo', tt: 'Texto', sx: 'Som avulso' }[item.kind]);
 
 // ---------- matemática do efeito ----------
 // força 0..1 do efeito em p (0..1 ao longo do item), pelos keyframes

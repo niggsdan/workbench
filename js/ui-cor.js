@@ -1,5 +1,6 @@
 // Tela Cor: álbum de stills, paleta, LUTs, visualizador, scopes, nós, grupos de cena e inspetor de cor.
 import { app, $, esc, fmtT, clone, clamp, video, still, st, edit, proj, mutEdit, mutProj, hooks, toast, compsAt, compiled } from './store.js';
+app.ui.wheelStyle = localStorage.getItem('wb.wheels') || 'resolve';
 import * as M from './model.js';
 import * as G from './grade.js';
 import { outSize, sampleCanvas, gradedThumb } from './render.js';
@@ -38,7 +39,8 @@ function renderPal() {
     <div style="font-weight:800;font-size:12px">Teu material · G${i + 1}${st() ? ' · ' + plural(groupScenes(e, i), 'cena', 'cenas') : ''}</div>${blk(app.palCor)}
     <div style="font-weight:800;font-size:12px;margin-top:14px">Referência</div><div class="note">${M.refPalette(proj()) ? 'Da referência do projeto' : 'Exemplo, a paleta é anotada por você'}</div>${blk(ref)}
     <div style="display:flex;flex-direction:column;gap:6px;margin-top:12px"><button type="button" class="btn" data-act="ref-load">Carregar imagem de referência</button>
-    <button type="button" class="btn solid" data-act="pal-start" ${st() ? '' : 'aria-disabled="true"'}>Usar como ponto de partida</button></div></div>`;
+    <button type="button" class="btn solid" data-act="pal-sim" ${st() ? '' : 'aria-disabled="true"'} title="Cria um nó que leva as cores do teu material pras cores do filme, e você ajusta cada uma">Simular a cor do filme</button>
+    <button type="button" class="btn" data-act="pal-start" ${st() ? '' : 'aria-disabled="true"'}>Só ajustar as rodas</button></div></div>`;
 }
 function renderLuts() {
   const g = target(); const prim = g ? (curNode() && curNode().kind === 'prim' ? curNode() : g.serial.find((n) => n.kind === 'prim')) : null;
@@ -68,7 +70,7 @@ function renderScopes() {
 }
 
 // ---------- nós ----------
-const KIND_TXT = { prim: 'Balanço geral da cena', curve: 'Contraste e rolagem de luzes', qual: 'Secundária por qualificador', hala: 'Brilho nas luzes fortes' };
+const KIND_TXT = { prim: 'Balanço geral da cena', curve: 'Contraste e rolagem de luzes', qual: 'Secundária por qualificador', hala: 'Brilho nas luzes fortes', pal: 'Simula as cores do filme de referência' };
 function graphLayout(g) {
   const nodes = []; const links = []; const rowH = 46; const k = Math.max(1, g.par.length);
   const H = Math.max(180, k * rowH + 70); const cy = H / 2 - 15;
@@ -93,7 +95,7 @@ function renderNodes() {
   const path = ([a, b]) => { const x1 = a.x + a.w; const y1 = a.y + 15; const x2 = b.x; const y2 = b.y + 15; const mx = (x1 + x2) / 2; return `<path d="M${x1} ${y1} H${mx} V${y2} H${x2}" fill="none" stroke="#6a7078" stroke-width="2"/>`; };
   $('#c-nodes').innerHTML = `<div class="n-head"><h2 class="tool">Nós</h2><span class="sub">${app.ui.editing === 'general' ? 'Grade geral (por cima de todas as cenas)' : `G${i + 1} · grade da cena + grade geral`}</span><div class="grow"></div>
       <div class="seg sm"><button type="button" data-act="editing" data-v="shot" aria-pressed="${app.ui.editing !== 'general'}">Editando G${i + 1}</button><button type="button" data-act="editing" data-v="general" aria-pressed="${app.ui.editing === 'general'}">Grade geral</button></div>
-      <button type="button" class="btn sm" data-act="node-add" data-v="serial">+ Nó em série</button><button type="button" class="btn sm" data-act="node-add" data-v="par">+ Paralelo</button><button type="button" class="btn sm" data-act="node-add" data-v="post">+ Camada</button>
+      <button type="button" class="btn sm" data-act="node-add" data-v="serial">+ Nó em série</button><button type="button" class="btn sm" data-act="node-add" data-v="par">+ Paralelo</button><button type="button" class="btn sm" data-act="node-add" data-v="post">+ Camada</button><button type="button" class="btn sm" data-act="pal-sim">+ Paleta do filme</button>
       <button type="button" class="btn sm" data-act="general-toggle" aria-pressed="${e.general.on}">${e.general.on ? 'Grade geral ligada' : 'Grade geral desligada'}</button></div>
     <div class="n-graph" style="height:${L.H + 10}px"><div style="position:relative;width:${L.W}px;height:${L.H}px"><svg width="${L.W}" height="${L.H}">${L.links.map(path).join('')}</svg>
       ${L.nodes.map((n) => `<button type="button" class="nd${n.off ? ' off' : ''}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px" data-act="node" data-id="${n.id}" aria-pressed="${sel === n.id}" title="${esc(n.label)}">${esc(n.label)}</button>`).join('')}</div>
@@ -104,8 +106,11 @@ function renderNodes() {
 function renderShots() {
   const e = edit(); if (!e || !st()) { $('#c-shots').innerHTML = '<div class="muted">Os grupos de cena aparecem quando um vídeo for aberto.</div>'; return; }
   const n = M.groupCount(e); const i = gi();
-  $('#c-shots').innerHTML = Array.from({ length: n }, (_, k) => `<button type="button" class="shot" data-act="shot" data-i="${k}" aria-pressed="${k === i}"><canvas width="96" height="54" data-thumb="${k}"></canvas><span class="r"><b>G${k + 1}</b><span>${plural(groupScenes(e, k), 'cena', 'cenas')}</span></span></button>`).join('')
-    + `<div style="display:flex;flex-direction:column;gap:6px;justify-content:center;flex:none"><button type="button" class="btn sm" data-act="grp-split" title="Começa um grupo novo no corte de cena mais próximo do playhead">Dividir no corte</button><button type="button" class="btn sm" data-act="grp-join" ${i > 0 ? '' : 'aria-disabled="true"'}>Juntar com anterior</button><button type="button" class="btn sm" data-act="grp-auto">Agrupar por cor</button></div>`;
+  const D = app.duration; const pc = (t) => (t / D * 100).toFixed(3) + '%';
+  const mini = `<div class="cmini" id="cmini" title="Clique pra ir até o ponto"><div class="cl"><span>Cor</span><div class="ln" data-cl="1">${Array.from({ length: n }, (_, k) => { const [a, b] = M.groupRange(e, k, D); return `<i class="${k === i ? 'on' : ''}" style="left:${pc(a)};width:${((b - a) / D * 100).toFixed(3)}%">G${k + 1}</i>`; }).join('')}</div></div>
+    <div class="cl"><span>Cenas</span><div class="ln" data-cl="1">${st().scenes.map((sc, k) => `<i class="sc${k % 2 ? ' alt' : ''}" style="left:${pc(sc.a)};width:${((sc.b - sc.a) / D * 100).toFixed(3)}%">C${k + 1}</i>`).join('')}</div></div><u id="cmini-ph" style="left:${pc(app.ph)}"></u></div>`;
+  $('#c-shots').innerHTML = mini + '<div class="shot-row">' + Array.from({ length: n }, (_, k) => `<button type="button" class="shot" data-act="shot" data-i="${k}" aria-pressed="${k === i}"><canvas width="96" height="54" data-thumb="${k}"></canvas><span class="r"><b>G${k + 1}</b><span>${plural(groupScenes(e, k), 'cena', 'cenas')}</span></span></button>`).join('')
+    + `<div style="display:flex;flex-direction:column;gap:6px;justify-content:center;flex:none"><button type="button" class="btn sm" data-act="grp-split" title="Começa um grupo novo no corte de cena mais próximo do playhead">Dividir no corte</button><button type="button" class="btn sm" data-act="grp-join" ${i > 0 ? '' : 'aria-disabled="true"'}>Juntar com anterior</button><button type="button" class="btn sm" data-act="grp-auto">Agrupar por cor</button></div></div>`;
   drawThumbs();
 }
 export function drawThumbs() {
@@ -149,7 +154,16 @@ function renderInsp() {
   let body = '';
   if (nd.kind === 'prim') {
     const p = nd.prim;
-    body = `<div><h3>Rodas</h3><div class="wheels" style="margin-top:8px">${['lift', 'gamma', 'gain', 'offset'].map((w) => `<div class="wheel"><div class="w" data-wheel="${w}" title="Arraste. Duplo clique zera."><i style="left:${50 + p[w][0] * 50}%;top:${50 - p[w][1] * 50}%"></i></div>${w.charAt(0).toUpperCase() + w.slice(1)}</div>`).join('')}</div></div>
+    const lum = app.ui.wheelStyle === 'lumetri';
+    const W = lum ? [['lift', 'Sombras', ''], ['gamma', 'Meios-tons', ''], ['gain', 'Realces', '']] : [['lift', 'Lift', 'sombras'], ['gamma', 'Gamma', 'meios-tons'], ['gain', 'Gain', 'realces'], ['offset', 'Offset', 'tudo']];
+    const rgb = (w) => { const v = G.puckToVec(p[w], G.WHEEL_K[w]); const y = (p[w + 'Y'] || 0) * { lift: 0.25, gamma: 0.6, gain: 0.6, offset: 0.2 }[w]; return v.map((x) => (x + y >= 0 ? ' ' : '−') + Math.abs(x + y).toFixed(2).replace('.', ',')); };
+    body = `<div><div style="display:flex;justify-content:space-between;align-items:center"><h3>Rodas de cor</h3><div class="seg sm"><button type="button" data-act="wheel-style" data-v="resolve" aria-pressed="${!lum}">Resolve</button><button type="button" data-act="wheel-style" data-v="lumetri" aria-pressed="${lum}">Lumetri</button></div></div>
+      <div class="wheels2 ${lum ? 'lum' : ''}">${W.map(([w, l, sub]) => { const y = p[w + 'Y'] || 0; const c = rgb(w); return `<div class="wheel2">
+        <div class="wh-h"><b>${l}</b>${sub ? `<span>${sub}</span>` : ''}<button type="button" class="link-btn" data-act="wheel-reset" data-w="${w}" title="Zerar ${l}">↺</button></div>
+        <div class="wh-body"><div class="w" data-wheel="${w}" title="Arraste o ponto. Shift: ajuste fino. Duplo clique: zera."><i style="left:${50 + p[w][0] * 50}%;top:${50 - p[w][1] * 50}%"></i></div>
+        ${lum ? `<input type="range" class="vmaster" orient="vertical" min="-1" max="1" step="0.01" value="${y}" data-act="cslider" data-path="prim" data-k="${w}Y" aria-label="Luminância ${l}">` : ''}</div>
+        ${lum ? '' : `<input type="range" min="-1" max="1" step="0.01" value="${y}" style="--p:${(y + 1) * 50}%" data-act="cslider" data-path="prim" data-k="${w}Y" aria-label="Master ${l}">`}
+        <div class="wh-rgb mono" data-rgb="${w}"><span class="r">R${c[0]}</span><span class="g">G${c[1]}</span><span class="b">B${c[2]}</span><span>Y ${(y >= 0 ? ' ' : '−') + Math.abs(y).toFixed(2).replace('.', ',')}</span></div></div>`; }).join('')}</div></div>
       <div><h3>Ajustes</h3>${PRIM.map((d) => slider('prim', d, p[d[0]])).join('')}</div>
       <div class="note">LUT neste nó: ${nd.lut ? esc(nd.lut) : 'nenhuma'} (escolha em LUTs, à esquerda).</div>`;
   } else if (nd.kind === 'curve') body = `<div><h3>Curva</h3><div style="margin-top:8px">${curveHtml(nd)}</div></div>`;
@@ -158,6 +172,13 @@ function renderInsp() {
       <div><h3>Correção dentro da seleção</h3>${QADJ.map((d) => slider('adj', d, nd.adj[d[0]])).join('')}</div>
       <div class="note">Só mexe nos pixels dentro da faixa de matiz, saturação e luminância.</div>`;
   } else if (nd.kind === 'hala') body = `<div><h3>Halation</h3>${HALA.map((d) => slider('h', d, nd[d[0]])).join('')}</div>`;
+  else if (nd.kind === 'pal') {
+    const row = (side, b) => `<div class="palrow">${((nd[side] || [])[b] || []).map((h, i) => `<input type="color" value="${h}" data-act="palsw" data-side="${side}" data-b="${b}" data-i="${i}" aria-label="${side === 'src' ? 'Cor do material' : 'Cor alvo'}">`).join('')}</div>`;
+    body = `<div><h3>Do teu material → cor do filme</h3><div class="note" style="margin:4px 0 8px">Clique em qualquer cor pra trocar. A de cima é o que tem no teu vídeo, a de baixo é pra onde ela vai.</div>
+      ${['Claros', 'Médios', 'Escuros'].map((l, b) => `<div class="palband"><b>${l}</b>${row('src', b)}<span class="arrow">↓</span>${row('dst', b)}</div>`).join('')}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn sm" data-act="pal-resample">Atualizar do quadro atual</button><button type="button" class="btn sm" data-act="pal-pullref">Puxar da referência</button></div></div>
+      <div><h3>Quanto</h3>${slider('pal', ['amount', 'Intensidade', 0, 1.5, 0.01, (v) => Math.round(v * 100) + '%'], nd.amount)}${['Claros', 'Médios', 'Escuros'].map((l, b) => slider('palb' + b, ['b' + b, l, 0, 1.5, 0.01, (v) => Math.round(v * 100) + '%'], nd.bands[b])).join('')}${slider('pal', ['sat', 'Saturação extra', -60, 60, 1, (v) => (v > 0 ? '+' : '') + Math.round(v)], nd.sat)}</div>`;
+  }
   el.innerHTML = `<div class="chips"><span class="kchip">${where}</span>${app.ui.editing === 'general' ? '<span class="kchip o">Grade geral</span>' : `<span class="kchip o">G${gi() + 1}</span>`}</div>
     <h3 class="big">${esc(nd.name || nd.kind)}</h3><div class="muted">${app.ui.editing === 'general' ? 'Grade geral' : 'G' + (gi() + 1)} · ${KIND_TXT[nd.kind]}</div>
     <div style="display:flex;gap:6px"><button type="button" class="btn sm" data-act="node-bypass" aria-pressed="${!nd.on}">${nd.on ? 'Desligar nó' : 'Ligar nó'}</button><button type="button" class="btn sm" data-act="node-del">Apagar nó</button></div>
@@ -190,6 +211,7 @@ export function drawCor() {
     else { const x = Math.round(w * app.ui.split); g.drawImage(alt, 0, 0, x, h, 0, 0, x, h); }
   }
   const tc = $('#c-tc'); if (tc) tc.innerHTML = fmtT(app.ph) + ' <span class="muted">/ ' + fmtT(app.duration) + '</span>';
+  const ph = $('#cmini-ph'); if (ph && app.duration) { const ln = document.querySelector('#cmini .ln'); ph.style.left = 'calc(' + (ln ? ln.offsetLeft : 0) + 'px + ' + (t / app.duration) + ' * (100% - ' + (ln ? ln.offsetLeft : 0) + 'px))'; }
 }
 function drawScopes(cv) {
   const sm = sampleCanvas(cv, 160);
@@ -239,6 +261,21 @@ export const actions = {
   },
   'grp-join'() { const i = gi(); if (i > 0) mutEdit('Juntar G' + i + ' e G' + (i + 1), (e) => M.joinGroup(e, i)); },
   'grp-auto'() { hooks.autoGroups(true); },
+  'wheel-style'(el) { app.ui.wheelStyle = el.dataset.v; localStorage.setItem('wb.wheels', el.dataset.v); renderInsp(); },
+  'wheel-reset'(el) { const w = el.dataset.w; const id = app.ui.node || curNode().id; mutGrade('Zerar ' + w, (gr) => { const n = G.findNode(gr, id); n.prim[w] = [0, 0]; n.prim[w + 'Y'] = 0; return gr; }); },
+  'pal-sim'() {
+    if (!app.palCor) { toast('Espere a prévia carregar.'); return; }
+    const dst = clone(M.refPalette(proj()) || EX_PAL); const src = clone(app.palCor); let id = null;
+    mutGrade('Simular a cor do filme', (gr) => {
+      let n = G.allNodes(gr).find((x) => x.kind === 'pal');
+      if (n) { n.src = src; n.dst = dst; } else { n = G.newNode('pal', { src, dst, name: 'N' + (G.allNodes(gr).length + 1) + ' · Paleta do filme' }); const i = gr.serial.findIndex((x) => x.kind === 'prim'); gr.serial.splice(i + 1, 0, n); }
+      id = n.id; return gr;
+    });
+    app.ui.node = id; render(); toast('Cores simuladas. Clique em qualquer cor no painel da direita pra ajustar.');
+  },
+  'pal-resample'() { if (!app.palCor) return; const id = app.ui.node; const src = clone(app.palCor); mutGrade('Paleta do quadro atual', (gr) => { G.findNode(gr, id).src = src; return gr; }); },
+  'pal-pullref'() { const id = app.ui.node; const dst = clone(M.refPalette(proj()) || EX_PAL); mutGrade('Paleta da referência', (gr) => { G.findNode(gr, id).dst = dst; return gr; }); },
+  'cmini'() {},
   'grade-copy'() { app.gradeClip = clone(target()); toast('Grade copiada. Use "Colar nas outras" pra aplicar em todos os outros grupos.'); renderInsp(); },
   'grade-paste'() {
     if (!app.gradeClip) return; const i = gi();
@@ -269,18 +306,27 @@ export const actions = {
 
 // ---------- entradas contínuas ----------
 function sliderInput(ev) {
-  const el = ev.target; if (el.dataset.act !== 'cslider') return;
+  const el = ev.target;
+  if (el.dataset.act === 'palsw') { const id = app.ui.node; const { side, b, i } = el.dataset; const v = el.value; mutGrade('Cor da paleta', (gr) => { const n = G.findNode(gr, id); n[side][+b][+i] = v; return gr; }, 'pw:' + id + side + b + i, true); hooks.preview(); return; }
+  if (el.dataset.act !== 'cslider') return;
   const path = el.dataset.path; const k = el.dataset.k; const v = +el.value; const id = app.ui.node || curNode().id;
-  mutGrade('Ajustar ' + k, (gr) => { const n = G.findNode(gr, id); if (path === 'prim') n.prim[k] = v; else if (path === 'adj') n.adj[k] = v; else n[k] = v; return gr; }, 'c:' + id + k, true);
+  mutGrade('Ajustar ' + k, (gr) => { const n = G.findNode(gr, id); if (path === 'prim') n.prim[k] = v; else if (path === 'adj') n.adj[k] = v; else if (path.startsWith('palb')) n.bands[+path.slice(4)] = v; else n[k] = v; return gr; }, 'c:' + id + k + path, true);
   el.style.setProperty('--p', pctOf(v, +el.min, +el.max));
-  const d = [...PRIM, ...HALA, ...QADJ, ['soft', '', 0, 1, 0, (x) => Math.round(x * 100) + '%']].find((x) => x[0] === k && (path !== 'adj' || QADJ.includes(x)));
-  const lab = el.closest('.sl').querySelector('[data-val]'); if (lab && d) lab.textContent = d[5](v);
+  const d = [...PRIM, ...HALA, ...QADJ, ['soft', '', 0, 1, 0, (x) => Math.round(x * 100) + '%'], ['amount', '', 0, 1.5, 0, (x) => Math.round(x * 100) + '%'], ['b0', '', 0, 0, 0, (x) => Math.round(x * 100) + '%'], ['b1', '', 0, 0, 0, (x) => Math.round(x * 100) + '%'], ['b2', '', 0, 0, 0, (x) => Math.round(x * 100) + '%'], ['sat', '', 0, 0, 0, (x) => (x > 0 ? '+' : '') + Math.round(x)]].find((x) => x[0] === k && (path !== 'adj' || QADJ.includes(x)) && (path === 'prim' || path === 'adj' || !['sat'].includes(k) || path === 'pal'));
+  const sl = el.closest('.sl'); const lab = sl && sl.querySelector('[data-val]'); if (lab && d) lab.textContent = d[5](v);
+  if (/Y$/.test(k)) refreshRgb(k.slice(0, -1));
   hooks.preview();
+}
+function refreshRgb(w) {
+  const el = document.querySelector('[data-rgb="' + w + '"]'); const nd = curNode(); if (!el || !nd || nd.kind !== 'prim') return;
+  const p = nd.prim; const v = G.puckToVec(p[w], G.WHEEL_K[w]); const y = (p[w + 'Y'] || 0) * { lift: 0.25, gamma: 0.6, gain: 0.6, offset: 0.2 }[w];
+  const f = (x) => (x >= 0 ? ' ' : '−') + Math.abs(x).toFixed(2).replace('.', ',');
+  el.innerHTML = `<span class="r">R${f(v[0] + y)}</span><span class="g">G${f(v[1] + y)}</span><span class="b">B${f(v[2] + y)}</span><span>Y ${f(p[w + 'Y'] || 0)}</span>`;
 }
 let cd = null;
 function down(ev) {
   const wheel = ev.target.closest('[data-wheel]'); const vline = ev.target.closest('#vline'); const strip = ev.target.closest('[data-range]'); const curve = ev.target.closest('#curve');
-  if (wheel) { cd = { type: 'wheel', el: wheel, w: wheel.dataset.wheel }; moveWheel(ev); }
+  if (wheel) { const nd = G.findNode(target(), app.ui.node || curNode().id); cd = { type: 'wheel', el: wheel, w: wheel.dataset.wheel, x0: ev.clientX, y0: ev.clientY, p0: nd.prim[wheel.dataset.wheel].slice() }; if (!ev.shiftKey) moveWheel(ev); }
   else if (vline) cd = { type: 'split', wrap: $('#cv-wrap') };
   else if (strip) { const r = strip.getBoundingClientRect(); const edge = ev.target.dataset.edge; const win = ev.target.closest('.win'); const nd = G.findNode(target(), app.ui.node || curNode().id); cd = { type: 'range', strip, k: strip.dataset.range, max: +strip.dataset.max, edge: edge || (win ? 'move' : 'jump'), r, x0: ev.clientX, lo: nd.range[strip.dataset.range][0], hi: nd.range[strip.dataset.range][1] }; if (cd.edge === 'jump') { const c = (ev.clientX - r.left) / r.width * cd.max; const half = (cd.hi - cd.lo) / 2; cd.lo = c - half; cd.hi = c + half; cd.edge = 'move'; cd.x0 = ev.clientX; moveRange(ev); } }
   else if (curve) {
@@ -291,10 +337,12 @@ function down(ev) {
   ev.preventDefault();
 }
 function moveWheel(ev) {
-  const r = cd.el.getBoundingClientRect(); let x = ((ev.clientX - r.left) / r.width - 0.5) * 2; let y = -((ev.clientY - r.top) / r.height - 0.5) * 2; const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
+  const r = cd.el.getBoundingClientRect(); let x; let y;
+  if (ev.shiftKey) { x = cd.p0[0] + (ev.clientX - cd.x0) / r.width * 0.4; y = cd.p0[1] - (ev.clientY - cd.y0) / r.height * 0.4; } else { x = ((ev.clientX - r.left) / r.width - 0.5) * 2; y = -((ev.clientY - r.top) / r.height - 0.5) * 2; }
+  const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
   const id = app.ui.node || curNode().id; const w = cd.w;
   mutGrade('Roda ' + w, (gr) => { G.findNode(gr, id).prim[w] = [Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000]; return gr; }, 'w:' + id + w, true);
-  const dot = cd.el.querySelector('i'); dot.style.left = 50 + x * 50 + '%'; dot.style.top = 50 - y * 50 + '%'; hooks.preview();
+  const dot = cd.el.querySelector('i'); dot.style.left = 50 + x * 50 + '%'; dot.style.top = 50 - y * 50 + '%'; refreshRgb(w); hooks.preview();
 }
 function moveRange(ev) {
   const d = (ev.clientX - cd.x0) / cd.r.width * cd.max; let lo = cd.lo; let hi = cd.hi;
@@ -327,8 +375,9 @@ function dbl(ev) {
 
 export function bind() {
   const v = $('#view-cor');
+  v.addEventListener('click', (e) => { const ln = e.target.closest('[data-cl]'); if (!ln || !app.duration) return; const r = ln.getBoundingClientRect(); hooks.seek(clamp((e.clientX - r.left) / r.width, 0, 1) * app.duration); });
   v.addEventListener('input', sliderInput);
-  v.addEventListener('change', (e) => { if (e.target.dataset.act === 'cslider' && app.hist) { app.hist.seal(); render(); } });
+  v.addEventListener('change', (e) => { if (['cslider', 'palsw'].includes(e.target.dataset.act) && app.hist) { app.hist.seal(); render(); } });
   v.addEventListener('pointerdown', down); window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); v.addEventListener('dblclick', dbl);
   $('#lut-file').addEventListener('change', async (e) => {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;

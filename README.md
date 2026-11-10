@@ -14,6 +14,8 @@ Três áreas navegáveis no topo, como no preview aprovado:
 - **Inspetor** com motivo, parâmetros, keyframes, som do efeito, receita, e Aceitar, Trocar e Apagar.
 
 **Cor**
+- Rodas no estilo Resolve (Lift, Gamma, Gain, Offset, com master e valores RGB) ou Lumetri (Sombras, Meios-tons, Realces). Shift faz ajuste fino.
+- Simular a cor do filme: um nó de Paleta leva as cores do teu material pras cores da referência, com cada cor editável e intensidade por claros, médios e escuros.
 - Grade de verdade por grupo de cenas (G1…Gn, agrupados por cor automaticamente) e grade geral por cima.
 - Nós em série, em paralelo e camadas: Primária (rodas lift, gamma, gain e offset, contraste, pivô, temperatura, matiz, saturação, realces e sombras), Curvas, Pele e Céu por qualificador, e Halation.
 - Visualizador com Atual, Referência e Dividir; waveform, vectorscope e histograma; álbum de stills; paleta; importação e exportação de LUT .cube; copiar e colar grade.

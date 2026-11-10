@@ -8,9 +8,11 @@ import * as F from './fx.js';
 import { outSize } from './render.js';
 import { extractPalette } from './grade.js';
 import { sampleCanvas } from './render.js';
+import { refineCuts } from './sampler.js';
 import { SOUNDS } from './fx.js';
 import * as T from './transcript.js';
 import { EYECANDY, CATS, EYE_URL } from './eyecandy.js';
+import * as K from './masks.js';
 import { transcribe } from './transcribe.js';
 
 const SMALL = ['de', 'da', 'do', 'das', 'dos', 'à', 'e', 'a', 'o'];
@@ -42,7 +44,7 @@ export function renderRail() {
 }
 
 // ---------- Efeitos ----------
-const BADGE = { Ajuste: '', Linguagem: 'ghost', Preset: '', Gerado: 'ghost', Arquivo: 'dash' };
+const BADGE = { Ajuste: '', Linguagem: 'ghost', Preset: '', Gerado: 'ghost', Arquivo: 'dash', Animada: '' };
 const ECATS = [['all', 'Todas'], ['aqui', 'Feitas aqui'], ...Object.entries(CATS)];
 const fgUrl = (q) => 'https://film-grab.com/?s=' + encodeURIComponent(q);
 const micUrl = (q) => 'https://www.google.com/search?q=' + encodeURIComponent('site:moviesincolor.com ' + q);
@@ -82,10 +84,11 @@ function libRows() {
     return (mine ? `<div class="lib-sec">Tuas referências</div>${mine}` : '') + fgHead + fgBody
       + `<button type="button" class="lib-row" data-act="cin-add"><span class="t"><b>ADICIONAR À MÃO</b><span class="h">Filme que não está no Film Grab</span></span><span class="badge ghost">Novo</span></button>`;
   }
-  const mine = app.lib.items.filter((i) => i.kind === 'video' && i.role === 'Overlays' && hit(i.name));
+  const mine = app.lib.items.filter((i) => (i.kind === 'video' || (i.kind === 'image' && !/\.(orf|rw2|cr2|cr3|nef|arw|raf|dng)$/i.test(i.name))) && i.role === 'Overlays' && hit(i.name));
   return F.TEXTURES.filter((t) => hit(t.name, t.hint)).map((t) => `<button type="button" class="lib-row" data-act="tex-add" data-k="${t.key}"><span class="t"><b>${t.name}</b><span class="h">${t.hint}</span></span><span class="badge ${BADGE[t.badge]}">${t.badge}</span></button>`).join('')
-    + mine.map((i) => `<button type="button" class="lib-row" data-act="ov-pick" data-id="${i.id}"><span class="t"><b>OVERLAY · ${esc(i.name.replace(/\.[^.]+$/, '').toUpperCase())}</b><span class="h">Da tua pasta Overlays, em modo Screen</span></span><span class="badge dash">Arquivo</span></button>`).join('')
+    + mine.map((i) => `<button type="button" class="lib-row" data-act="ov-pick" data-id="${i.id}"><span class="t"><b>${i.kind === 'image' ? 'TEXTURA' : 'OVERLAY'} · ${esc(i.name.replace(/\.[^.]+$/, '').toUpperCase())}</b><span class="h">${i.kind === 'image' ? 'Imagem da tua pasta Overlays, animada quadro a quadro' : 'Vídeo da tua pasta Overlays'}</span></span><span class="badge dash">Arquivo</span></button>`).join('')
     + `<button type="button" class="lib-row" data-act="ov-add"><span class="t"><b>${F.OVERLAY.name}</b><span class="h">${F.OVERLAY.hint}</span></span><span class="badge dash">Arquivo</span></button>`
+    + `<button type="button" class="lib-row" data-act="texturelabs"><span class="t"><b>TEXTURELABS</b><span class="h">Texturas grátis de filme, grunge, papel e lente pra pasta Overlays</span></span><span class="badge ghost">Links</span></button>`
     + `<button type="button" class="lib-row" data-act="pack-8mm"><span class="t"><b>PACK 8MM GRATUITO</b><span class="h">Onde baixar scans reais de 8 mm pra pasta Overlays</span></span><span class="badge ghost">Links</span></button>`;
 }
 const NOTES = { tec: 'Vocabulário Eyecandy (' + EYECANDY.length + ' técnicas): só o nome e o link. Ajuste é produzido aqui; Linguagem vira marcador.', cin: 'Busca nos três sites pelo nome. Nenhuma imagem deles fica aqui; os detalhes e a paleta são anotados por você.', tex: 'Gerado no Workbench. Overlays em arquivo vêm da tua pasta Overlays.' };
@@ -108,6 +111,7 @@ export function renderMonitorBar() {
   const first = use[0];
   $('#style-pill').textContent = 'Estilo: ' + (first ? titleCase(first.name) + (use.length > 1 ? ' +' + (use.length - 1) : '') : 'nenhum');
   const fp = $('#fxprev'); fp.setAttribute('aria-pressed', String(app.ui.fxPreview));
+  $('#mtools').innerHTML = `<button type="button" data-act="mtool" data-v="seta" aria-pressed="${app.ui.mtool === 'seta'}" title="Seta: selecione e mova máscaras direto no vídeo">➚ Seta</button>` + K.MASK_TYPES.map((m) => `<button type="button" data-act="mask-add" data-k="${m.key}" title="${m.hint}">+ ${m.name}</button>`).join('');
   $('#play').innerHTML = video.paused ? '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z" fill="currentColor"/></svg>' : '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M7 5h4v14H7z M13 5h4v14h-4z" fill="currentColor"/></svg>';
 }
 
@@ -139,26 +143,22 @@ export function renderDetector() {
   const el = $('#detector'); const s = st(); const h = app.hist;
   if (!s) {
     const msg = app.error || app.notice || (app.busy ? 'Lendo o vídeo e procurando os cortes…' : 'Abra um vídeo pra o Workbench achar os cortes de cena.');
-    el.innerHTML = `<div class="d-head"><h2 class="tool">Detector de cenas</h2><span class="pill-tag">${app.busy ? 'analisando' : 'sem vídeo'}</span></div><div class="muted">${esc(msg)}</div>`;
+    el.innerHTML = `<div class="d-head"><h2 class="tool">Cenas</h2><span class="pill-tag">${app.busy ? 'analisando' : 'sem vídeo'}</span><span class="muted ell">${esc(msg)}</span></div>`;
     return;
   }
-  const { scenes, sens } = s; const i = P.sceneAt(scenes, app.ph); const sc = scenes[i];
-  const ctrls = [['Dividir no playhead', 'split', P.canSplit(scenes, i, app.ph)], ['Juntar com a anterior', 'join-prev', P.canJoinPrev(scenes, i)], ['Juntar com a próxima', 'join-next', P.canJoinNext(scenes, i)], ['Corte −0,5 s', 'cut-', P.canMoveCut(scenes, i, -0.5)], ['Corte +0,5 s', 'cut+', P.canMoveCut(scenes, i, 0.5)]];
-  const k = P.RATIOS.indexOf(app.ratio); const manual = k >= 0 && k < 3 && sc.m[k] === 2;
-  const frames = [['9:16', 25, 0], ['1:1', 44, 1], ['4:5', 35, 2], ['16:9', 78, -1]].map(([r, w, kk]) => {
-    const m = kk >= 0 ? sc.m[kk] : -1; const x = kk < 0 ? 62 : m === 2 ? sc.ox[kk] : 50;
-    return `<button type="button" class="fmt" data-act="mode" data-k="${kk}" aria-disabled="${dis(kk >= 0)}" aria-label="${kk < 0 ? '16:9 mantém o quadro original' : 'Enquadramento ' + r + ' de ' + N(i) + ': ' + P.MODES[m] + '. Toque para trocar.'}"><span class="box${m === 2 ? ' man' : ''}" style="width:${w}px"><span class="head" style="left:${x}%"></span><span class="body" style="left:${x}%"></span></span><span class="l">${r}</span><span class="md">${kk < 0 ? 'Original' : P.MODES[m]}</span></button>`;
-  }).join('');
-  el.innerHTML = `<div class="d-head"><h2 class="tool">Detector de cenas</h2><span class="pill-tag">${scenes.length} cenas</span>
+  const { scenes, sens } = s; const i = P.sceneAt(scenes, app.ph);
+  const canCut = P.canSplit(scenes, i, app.ph); const canGlue = scenes.length > 1;
+  el.innerHTML = `<div class="d-head"><h2 class="tool">Cenas</h2><span class="pill-tag">${scenes.length} cenas</span>
     <div class="sens"><span class="muted" style="font-size:11px;font-weight:600">Sensibilidade</span><button type="button" class="btn sm" data-act="sens-" aria-label="Menos sensível" aria-disabled="${dis(sens > 0)}">−</button><span class="lbl">${SENS_LABELS[sens]}</span><button type="button" class="btn sm" data-act="sens+" aria-label="Mais sensível" aria-disabled="${dis(sens < 4)}">+</button></div>
+    <button type="button" class="btn sm solid" data-act="detect-exact" ${app.exact ? 'aria-disabled="true"' : ''} title="Acha as mudanças de cena e corta no quadro exato">${app.exact ? esc(app.exact) : 'Detectar cenas'}</button>
+    <span class="vsep"></span>
+    <button type="button" class="btn sm" data-act="cut" aria-disabled="${dis(canCut)}" title="Corta a cena no playhead (${fmtT(app.ph)})">✂ Cortar</button>
+    <button type="button" class="btn sm" data-act="glue" aria-disabled="${dis(canGlue)}" title="Junta ${N(i)} com a cena seguinte">Colar</button>
+    <button type="button" class="btn sm" data-act="cut-" aria-disabled="${dis(P.canMoveCut(scenes, i, -0.5))}" title="Puxa o corte de entrada de ${N(i)} meio segundo pra trás">Corte −0,5 s</button>
+    <button type="button" class="btn sm" data-act="cut+" aria-disabled="${dis(P.canMoveCut(scenes, i, 0.5))}" title="Empurra o corte de entrada de ${N(i)} meio segundo pra frente">Corte +0,5 s</button>
     <div class="status" id="d-status">Última ação: <b>${esc(h.label)}</b> · passo ${h.step} de ${h.total}</div>
     <button type="button" class="btn sm" data-act="undo" aria-disabled="${dis(h.canUndo)}" title="${h.canUndo ? 'Desfazer: ' + esc(h.undoLabel) : 'Nada para desfazer'}">Desfazer</button>
-    <button type="button" class="btn sm" data-act="redo" aria-disabled="${dis(h.canRedo)}" title="${h.canRedo ? 'Refazer: ' + esc(h.redoLabel) : 'Nada para refazer'}">Refazer</button></div>
-    <div class="ctrls" role="group" aria-label="Ajustes da cena selecionada">${ctrls.map(([l, a, ok]) => `<button type="button" class="btn" data-act="${a}" aria-disabled="${dis(ok)}">${l}</button>`).join('')}</div>
-    <div class="d-body"><div class="cards" aria-label="Cenas">${scenes.map((c, n) => `<button type="button" class="sc" data-act="pick" data-i="${n}" aria-pressed="${n === i}"><span class="r1"><b>${N(n)}</b><span class="m">${dsec(c.a, c.b)}</span></span><span class="t">${fmtT(c.a)} → ${fmtT(c.b)}</span><span class="g">9:16 · ${P.MODES[c.m[0]]}</span></button>`).join('')}</div>
-    <div class="fmts"><div class="fmts-title">Formatos de ${N(i)} · toque pra trocar</div><div class="fmts-row">${frames}</div>
-    <label class="offset" aria-disabled="${dis(manual)}">Posição (${app.ratio})<input type="range" min="0" max="100" value="${manual ? sc.ox[k] : 50}" style="--p:${manual ? sc.ox[k] : 50}%" data-act="offset" ${manual ? '' : 'disabled'}></label></div></div>`;
-  const sel = el.querySelector('.sc[aria-pressed="true"]'); if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    <button type="button" class="btn sm" data-act="redo" aria-disabled="${dis(h.canRedo)}" title="${h.canRedo ? 'Refazer: ' + esc(h.redoLabel) : 'Nada para refazer'}">Refazer</button></div>`;
 }
 
 // muda as cenas e mantém os grupos de cor colados nos cortes
@@ -183,11 +183,11 @@ export function renderAutofx() {
   const c = e ? F.countSuggested(e.fx) : { fx: 0, tx: 0, sfx: 0 };
   const pend = c.fx + c.tx;
   const ic = '<svg width="18" height="18" viewBox="0 0 24 24"><path d="' + IC['Auto-FX'] + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  if (!e || !st()) { el.innerHTML = `<div class="ic">${ic}</div><div class="tx"><b>Auto-FX</b><span>Abra um vídeo e o Auto-FX sugere efeitos, texturas e sons a partir dos cortes de cena e do estilo do projeto.</span></div>`; return; }
+  if (!e || !st()) { el.innerHTML = `<div class="ic">${ic}</div><div class="tx"><b>Auto-FX</b> <span>Abra um vídeo e o Auto-FX sugere efeitos, texturas e sons pelos cortes, pela fala e pelo estilo.</span></div>`; return; }
   const hasAuto = e.fx.some((f) => f.auto);
   const style = e.cinema.filter((x) => x.state === 'use').map((x) => titleCase(x.name))[0] || 'estilo livre';
   const tr = e.transcript && e.transcript.segs.length;
-  el.innerHTML = `<div class="ic">${ic}</div><div class="tx"><b>${hasAuto ? 'Auto-FX leu ' + (tr ? 'a transcrição, ' : '') + 'os cortes de cena e o estilo do projeto' : 'Auto-FX ainda não sugeriu nada'}</b>
+  el.innerHTML = `<div class="ic">${ic}</div><div class="tx"><b>${hasAuto ? 'Auto-FX leu ' + (tr ? 'a transcrição, ' : '') + 'os cortes e o estilo' : 'Auto-FX'}</b> 
     <span>${pend ? `${c.fx} efeitos, ${c.tx} texturas e ${c.sfx} sons sugeridos. Tudo pode ser movido, trocado ou apagado.` : hasAuto ? 'Tudo aceito. Você ainda pode mover, trocar ou apagar na timeline.' : `Sugere efeitos nos cortes mais fortes, texturas pelo estilo (${esc(style)}) e sons${tr ? ', e jump cut nas pausas da fala' : '. Com a transcrição, ele também usa a fala'}.`}</span></div>
     ${!tr && !app.tr.busy ? '<button type="button" class="btn" data-act="tool" data-name="Transcrição">Transcrever</button>' : ''}
     ${pend ? '<button type="button" class="btn" data-act="autofx-review">Revisar um a um</button><button type="button" class="btn solid" data-act="autofx-accept">Aceitar tudo</button>'
@@ -214,8 +214,7 @@ export function renderTimeline() {
   const plat = e ? F.PLATFORMS.find((p) => p.key === e.platform) : F.PLATFORMS[1];
   el.innerHTML = `<div class="tl-head"><div class="l"><h2 class="tool">Timeline</h2><span class="muted" style="font-weight:600">${plat.label.split(' · ')[0]} · ${s ? fmtClock(F.outDuration(e.fx, app.duration)).padStart(5, '0') : '00:00'}</span></div>
     <div class="legend"><span class="k"><i style="background:#e6e7e9"></i>Vídeo</span><span class="k"><i style="background:#6b7077"></i>Cenas</span><span class="k"><i style="background:var(--wine)"></i>FX</span><span class="k"><i style="border:1.5px solid var(--wine-line)"></i>Textura</span>
-    <button type="button" class="btn sm" data-act="blade" aria-pressed="${app.ui.blade}" title="Clique numa faixa de cenas pra cortar naquele ponto">Lâmina</button>
-    <button type="button" class="btn sm" data-act="snap" aria-pressed="${app.ui.snap}" title="Gruda nos cortes e nas bordas dos outros itens">Ímã</button></div></div>
+</div></div>
     <div class="tl-body" id="timeline"></div>`;
   const body = $('#timeline');
   if (!s) { body.innerHTML = '<div class="tl-empty">A timeline aparece quando um vídeo for aberto.</div>'; return; }
@@ -240,6 +239,7 @@ export function renderTimeline() {
     ${g('FX · técnicas', tec, 'fxr', 'fx')}
     ${g('Textura e lente', tex, 'fxr', 'tx')}
     ${g('Overlay', ov, '', 'ov')}
+    ${g('Máscaras', e.fx.filter((f) => f.kind === 'mk').map((f) => clip(f, 'mk', K.maskType(f.key).name) .replace('</div>', f.shapeKf.map((k) => `<b class="kfd" style="left:${((k.t - f.a) / Math.max(0.01, f.b - f.a) * 100).toFixed(2)}%"></b>`).join('') + '</div>')).join(''), '', 'mk')}
     ${g('Texto', tt, '', 'tt')}
     ${g('SFX', sfx, '', 'sfx')}
     ${g('Cor · grade por cena', groups, '', 'grp')}
@@ -271,7 +271,7 @@ function onPointerDown(ev) {
   const id = c.dataset.clip || c.dataset.sfx; const it = edit().fx.find((f) => f.id === id); if (!it) return;
   app.ui.sel = id; app.ui.selRef = null; app.ui.itab = 'efeito';
   const lane = c.closest('.lane');
-  drag = { id, mode: c.dataset.sfx ? 'sfx' : ev.target.dataset.rz ? 'resize' : 'move', x0: ev.clientX, lane, a0: it.a, b0: it.b, off0: it.sfx ? it.sfx.off : 0, moved: false };
+  drag = { id, mode: c.dataset.sfx ? 'sfx' : ev.target.dataset.rz ? 'resize' : 'move', x0: ev.clientX, lane, a0: it.a, b0: it.b, off0: it.sfx ? it.sfx.off : 0, kf0: it.shapeKf ? it.shapeKf.map((k) => ({ ...k })) : null, moved: false };
   c.setPointerCapture && c.setPointerCapture(ev.pointerId);
   hooks.renderSel();
   ev.preventDefault();
@@ -285,7 +285,7 @@ function onPointerMove(ev) {
   const D = app.duration;
   mutLight('Mover ' + nice(edit().fx.find((f) => f.id === drag.id).name), (e2) => {
     const f = e2.fx.find((x) => x.id === drag.id);
-    if (drag.mode === 'move') { const [a, b] = M.moveTimes(drag.a0, drag.b0, dt, D, snaps); f.a = a; f.b = b; }
+    if (drag.mode === 'move') { const [a, b] = M.moveTimes(drag.a0, drag.b0, dt, D, snaps); f.a = a; f.b = b; if (f.kind === 'mk') f.shapeKf = drag.kf0.map((k) => ({ ...k, t: Math.round((k.t + a - drag.a0) * 1000) / 1000 })); }
     else if (drag.mode === 'resize') { let nb = clamp(drag.b0 + dt, drag.a0 + 0.1, D); for (const s of snaps) if (Math.abs(nb - s) < 0.12) { nb = s; break; } f.b = Math.round(nb * 100) / 100; if (f.kind === 'tec') F.techOf(f.key).params.forEach((p) => { if (p.len === true) f.params[p.k] = clamp(Math.round((f.b - f.a) * F.FPS), p.min, p.max); else if (p.len === 's') f.params[p.k] = clamp(Math.round((f.b - f.a) * 10) / 10, p.min, p.max); }); }
     else { const na = clamp(drag.a0 + drag.off0 + dt, 0, D); f.sfx.off = Math.round((na - (f.kind === 'sx' ? 0 : drag.a0)) * 100) / 100; if (f.kind === 'sx') { f.a = Math.round(na * 100) / 100; f.b = f.a + 0.5; } }
     return e2;
@@ -310,7 +310,7 @@ function laneClick(ev) {
   if (ev.target.closest('[data-clip],[data-sfx]')) return;
   if (grp) { app.ui.node = null; hooks.selectGroup(+grp.dataset.grp); return; }
   if (idea) { app.ui.selIdea = idea.dataset.idea; app.ui.sel = null; app.ui.itab = 'clipe'; hooks.seek(clamp(+edit().ideas.find((i) => i.id === idea.dataset.idea).a + 0.05, 0, app.duration)); hooks.renderAll(); return; }
-  if (app.ui.blade && (kind === 'scn' || kind === 'cuts' || kind === 'v1')) {
+  if (false) {
     const { scenes } = st(); const tt = P.r1(t); const i = P.sceneAt(scenes, tt);
     if (P.canSplit(scenes, i, tt)) { app.ph = tt; commitScenes('Lâmina: dividir ' + N(i) + ' em ' + fmtT(tt), P.split(scenes, i, tt)); hooks.seek(tt); } else toast('Aqui a cena ficaria menor que 0,5 s.');
     return;
@@ -342,15 +342,20 @@ function itemHtml(it) {
   const ovF = it.kind === 'ov' ? `<div class="box" style="margin-top:10px"><div class="r"><b>${esc(it.file || 'overlay')}</b></div><small>Licença gratuita · atribuição ${it.credit.required ? 'obrigatória' : 'não exigida'}</small>
       <div class="field" style="margin-top:6px">Criador<input type="text" placeholder="Nome do criador" value="${esc(it.credit.creator)}" data-act="credit" data-id="${it.id}"></div>
       <label class="toggle" style="margin-top:6px"><input type="checkbox" ${it.credit.required ? 'checked' : ''} data-act="credit-req" data-id="${it.id}"> Exige atribuição (entra em creditos.txt na entrega)</label></div>` : '';
+  const mkBlock = it.kind === 'mk' ? `<div><h3>Forma</h3><div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap"><div class="seg sm"><button type="button" data-act="mk-shape" data-v="0" aria-pressed="${Math.round(it.params.shape) === 0}">Retângulo</button><button type="button" data-act="mk-shape" data-v="1" aria-pressed="${Math.round(it.params.shape) === 1}">Elipse</button></div>
+      <button type="button" class="btn sm" data-act="mk-invert" aria-pressed="${!!Math.round(it.params.invert || 0)}">Inverter</button><div class="seg sm">${K.MASK_TYPES.map((m) => `<button type="button" data-act="mk-type" data-v="${m.key}" aria-pressed="${it.key === m.key}">${m.name}</button>`).join('')}</div></div></div>
+    <div><h3>Keyframes no vídeo</h3><div class="note" style="margin:4px 0 6px">Com a seta, arraste ou redimensione a forma no monitor. Em outro ponto do vídeo, isso cria um keyframe novo.</div>
+      <div class="kflist">${it.shapeKf.map((k) => `<span class="kfi${Math.abs(k.t - app.ph) < 0.06 ? ' on' : ''}"><button type="button" data-act="mk-goto" data-t="${k.t}">◆ ${fmtT(k.t)}</button>${it.shapeKf.length > 1 ? `<button type="button" data-act="mk-delkf" data-t="${k.t}" aria-label="Apagar keyframe">×</button>` : ''}</span>`).join('')}</div></div>` : '';
   const chips = `<div class="chips"><span class="kchip">${esc(F.kindLabel(it))}</span>${it.auto && !it.accepted ? '<span class="kchip o">Sugerido pela IA</span>' : ''}</div>`;
   return `${chips}<h3 class="big" style="font-size:26px;text-transform:none;letter-spacing:0;color:var(--txt)">${esc(nice(it.name))}</h3>
     <div class="mono muted" id="i-range">${fmtT(it.a)} → ${fmtT(it.b)}</div>
     <div><h3>Por que aqui</h3><div class="why" style="margin-top:6px">${esc(it.why || '')}</div></div>
+    ${mkBlock}
     ${defs.length || tex || it.kind === 'ov' ? `<div><h3>${tex ? 'Conteúdo' : 'Parâmetros'}</h3>${textF}${defs.map((d) => sliderHtml(it, d)).join('')}${ovF}</div>` : ''}
     ${it.kf && it.kf.length ? `<div><h3>Keyframes</h3><div style="margin-top:6px">${kfHtml(it)}</div></div>` : ''}
-    ${it.kind !== 'tt' ? `<div><h3>Som do efeito</h3><div style="margin-top:6px">${sfx}</div></div>` : ''}
+    ${it.kind !== 'tt' && it.kind !== 'mk' ? `<div><h3>Som do efeito</h3><div style="margin-top:6px">${sfx}</div></div>` : ''}
     <div><h3>Receita</h3><div style="margin-top:6px;line-height:1.5">${esc(F.recipeOf(it))}</div>${eyeOf(it) ? `<a class="btn sm" style="margin-top:8px" href="${EYE_URL + eyeOf(it)}" target="_blank" rel="noopener noreferrer">Ver referência no Eyecandy ↗</a>` : ''}</div>
-    <div class="foot"><button type="button" class="btn solid" data-act="it-accept" ${it.accepted ? 'aria-disabled="true"' : ''}>${it.accepted ? 'Aceito' : 'Aceitar'}</button>${['tec', 'tx'].includes(it.kind) ? '<button type="button" class="btn" data-act="it-swap">Trocar efeito</button>' : ''}<button type="button" class="btn" data-act="it-del">Apagar</button></div>`;
+    <div class="foot">${it.kind === 'mk' ? '' : `<button type="button" class="btn solid" data-act="it-accept" ${it.accepted ? 'aria-disabled="true"' : ''}>${it.accepted ? 'Aceito' : 'Aceitar'}</button>`}${['tec', 'tx'].includes(it.kind) ? '<button type="button" class="btn" data-act="it-swap">Trocar efeito</button>' : ''}<button type="button" class="btn" data-act="it-del">Apagar</button></div>`;
 }
 function clipeHtml() {
   const s = st(); if (!s) return '<div class="hint-empty">Abra um vídeo pra ver os dados do clipe.</div>';
@@ -366,7 +371,7 @@ function clipeHtml() {
   return `<div class="chips"><span class="kchip o">Clipe</span></div><h3 class="big" style="font-size:26px;text-transform:none;letter-spacing:0;color:var(--txt)">${N(i)}</h3>
     <div class="mono muted">${fmtT(sc.a)} → ${fmtT(sc.b)} · ${dsec(sc.a, sc.b)}</div>
     <div class="box"><div class="r"><span>Grupo de cor</span><b>G${gi + 1}</b></div><div class="r" style="margin-top:6px"><span>Efeitos nesta cena</span><b>${over.length}</b></div></div>
-    <div><h3>Enquadramento</h3>${[0, 1, 2].map((k) => `<div class="r box" style="margin-top:6px;display:flex;justify-content:space-between;align-items:center"><span>${P.RATIOS[k]}</span><button type="button" class="btn sm" data-act="mode" data-k="${k}">${P.MODES[sc.m[k]]}</button></div>`).join('')}<div class="note" style="margin-top:6px">Rosto ainda enquadra no centro. Manual deixa você arrastar a posição.</div></div>
+    <div><h3>Enquadramento</h3>${[0, 1, 2].map((k) => `<div class="r box" style="margin-top:6px;display:flex;justify-content:space-between;align-items:center"><span>${P.RATIOS[k]}</span><button type="button" class="btn sm" data-act="mode" data-k="${k}">${P.MODES[sc.m[k]]}</button></div>`).join('')}${(() => { const k = P.RATIOS.indexOf(app.ratio); return k >= 0 && k < 3 && sc.m[k] === 2 ? `<label class="offset" style="margin-top:8px">Posição (${app.ratio})<input type="range" min="0" max="100" value="${sc.ox[k]}" style="--p:${sc.ox[k]}%" data-act="offset"></label>` : ''; })()}<div class="note" style="margin-top:6px">Rosto ainda enquadra no centro. Manual deixa você ajustar a posição.</div></div>
     ${idea ? `<div><h3>Ideia</h3><div class="field" style="margin-top:6px">Nome<input type="text" value="${esc(idea.name)}" data-act="idea-name" data-id="${idea.id}"></div><div class="mono muted" style="margin-top:6px">${fmtT(idea.a)} → ${fmtT(idea.b)}</div><div class="foot"><button type="button" class="btn" data-act="idea-del" data-id="${idea.id}">Apagar ideia</button></div></div>` : ''}
     ${over.length ? `<div><h3>Itens aqui</h3>${over.map((f) => `<button type="button" class="lib-row" data-act="sel" data-id="${f.id}"><span class="t"><b>${esc(nice(f.name))}</b><span class="h">${fmtT(f.a)} → ${fmtT(f.b)}</span></span></button>`).join('')}</div>` : ''}`;
 }
@@ -484,6 +489,18 @@ export function downloadSrt() {
 }
 
 export const actions = {
+  mtool(el) { app.ui.mtool = app.ui.mtool === el.dataset.v ? null : el.dataset.v; renderMonitorBar(); renderMaskLayer(); },
+  'mask-add'(el) {
+    if (!st() || app.view !== 'video') { toast('Abra um vídeo primeiro.'); return; }
+    const t = Math.min(video.currentTime, app.duration - 0.2); const m = K.newMask(el.dataset.k, t, app.duration, F.newId());
+    app.ui.mtool = 'seta'; addItem('Nova ' + K.maskType(m.key).name.toLowerCase(), m); renderMaskLayer();
+    toast('Arraste a forma no vídeo. Em outro ponto do tempo, mexer nela cria um keyframe.');
+  },
+  'mk-shape'(el) { const it = selItem(); mutEdit('Forma da máscara', (e) => M.updateFx(e, it.id, (f) => { f.params.shape = +el.dataset.v; })); },
+  'mk-invert'() { const it = selItem(); mutEdit('Inverter máscara', (e) => M.updateFx(e, it.id, (f) => { f.params.invert = f.params.invert ? 0 : 1; })); },
+  'mk-type'(el) { const it = selItem(); const k = el.dataset.v; mutEdit('Tipo: ' + K.maskType(k).name, (e) => M.updateFx(e, it.id, { key: k, name: K.maskType(k).name.toUpperCase() })); },
+  'mk-goto'(el) { hooks.seek(+el.dataset.t + 0.001); renderInspector(); },
+  'mk-delkf'(el) { const it = selItem(); const t = +el.dataset.t; mutEdit('Apagar keyframe', (e) => { const i = e.fx.findIndex((f) => f.id === it.id); e.fx[i] = K.removeKf(e.fx[i], t); return e; }); },
   'tr-model'(el) { app.tr.model = el.dataset.v; localStorage.setItem('wb.trModel', app.tr.model); openTranscript(); },
   'tr-lang'(el) { app.tr.lang = el.dataset.v; localStorage.setItem('wb.trLang', app.tr.lang); openTranscript(); },
   'tr-run'() { runTranscription(); },
@@ -536,6 +553,14 @@ export const actions = {
   'ref-del'(el) { const k = el.dataset.k; mutProj('Apagar referência', (e) => { e.cinema = e.cinema.filter((c) => c.key !== k); return e; }); app.ui.selRef = null; hooks.renderAll(); },
   'ref-pal'(el) { app.palTarget = el.dataset.k; $('#ref-file').click(); },
   'ref-pal-clear'(el) { const k = el.dataset.k; mutProj('Limpar paleta da referência', (e) => { e.cinema.find((c) => c.key === k).pal = null; return e; }); },
+  'tl-folder'() { $('#dlg').close(); $('#dir').click(); },
+  'texturelabs'() {
+    const dlg = $('#dlg');
+    dlg.innerHTML = `<div class="dlg"><h2>Texturelabs</h2><div class="muted" style="line-height:1.5">Texturas grátis em alta, liberadas pra uso comercial e em vídeo, sem precisar dar crédito. A licença deles não deixa colocar as texturas dentro de um app, então é assim: baixe a imagem, coloque na tua pasta <b>Overlays</b> e adicione a pasta no Material. Ela aparece aqui como <b>TEXTURA</b>, já animada quadro a quadro, com modo de mistura e opacidade.</div>
+      <div class="tl-grid2">${F.TEXTURELABS.map((c) => `<a class="opt" href="${c.url}" target="_blank" rel="noopener noreferrer"><b>${esc(c.name)} ↗</b></a>`).join('')}</div>
+      <div class="row2"><button type="button" class="btn" data-act="dlg-close">Fechar</button><button type="button" class="btn solid" data-act="tl-folder">Adicionar pasta Overlays</button></div></div>`;
+    dlg.showModal();
+  },
   'pack-8mm'() {
     const dlg = $('#dlg');
     dlg.innerHTML = `<div class="dlg"><h2>Pack 8mm gratuito</h2><div class="muted" style="line-height:1.5">Scans reais de película 8 mm pra usar como overlay. O Workbench não guarda nem redistribui esses arquivos: baixe no site, coloque na tua pasta <b>Overlays</b> e adicione a pasta no Material. Eles aparecem aqui na Textura.</div>
@@ -583,8 +608,25 @@ export const actions = {
   'cut-'() { moveCut(-0.5); }, 'cut+'() { moveCut(0.5); },
   mode(el) { const k = +el.dataset.k; if (k < 0) return; const { scenes } = st(); const i = curScene(); const n = P.cycleMode(scenes, i, k); commit('Enquadramento ' + P.RATIOS[k] + ' de ' + N(i) + ': ' + P.MODES[n[i].m[k]], (s) => { s.scenes = n; return s; }); },
   'sens-'() { setSens(-1); }, 'sens+'() { setSens(1); },
-  blade() { app.ui.blade = !app.ui.blade; renderTimeline(); },
-  snap() { app.ui.snap = !app.ui.snap; renderTimeline(); },
+  cut() { const { scenes } = st(); const i = curScene(); if (P.canSplit(scenes, i, app.ph)) commitScenes('Cortar ' + N(i) + ' em ' + fmtT(app.ph), P.split(scenes, i, app.ph)); else toast('Aqui a cena ficaria menor que 0,5 s. Mova o playhead.'); },
+  glue() { const { scenes } = st(); const i = curScene(); if (P.canJoinNext(scenes, i)) commitScenes('Colar ' + N(i) + ' e ' + N(i + 1), P.joinNext(scenes, i)); else if (P.canJoinPrev(scenes, i)) commitScenes('Colar ' + N(i - 1) + ' e ' + N(i), P.joinPrev(scenes, i)); },
+  async 'detect-exact'() {
+    const s = st(); if (!s || app.exact) return;
+    const cuts = selectCuts(app.cands, s.sens, app.duration);
+    if (!cuts.length) { toast('Nenhuma mudança de cena com essa sensibilidade. Aumente a sensibilidade e tente de novo.'); return; }
+    app.exact = 'Detectando… 0%'; renderDetector();
+    try {
+      const r = await refineCuts(app.url, cuts, { onProgress: (p) => { app.exact = 'Detectando… ' + Math.round(p * 100) + '%'; const b = document.querySelector('[data-act="detect-exact"]'); if (b) b.textContent = app.exact; } });
+      const exact = [...new Set(r.cuts)].filter((t) => t > 0.2 && t < app.duration - 0.2).sort((x, y) => x - y);
+      const clean = exact.filter((t, k) => k === 0 || t - exact[k - 1] >= P.MIN_SCENE);
+      const old = s.scenes; const scenes = P.scenesFromCuts(clean, app.duration);
+      scenes.forEach((sc) => { const o = old[P.sceneAt(old, sc.a + 0.01)]; sc.m = o.m.slice(); sc.ox = o.ox.slice(); });
+      app.fps = r.fps;
+      commitScenes('Detectar cenas: ' + scenes.length + ' cortes no quadro exato', scenes);
+      toast(scenes.length + ' cenas, cortadas no quadro exato da mudança (' + String(r.fps).replace('.', ',') + ' quadros por segundo).');
+    } catch (err) { if (err.name !== 'AbortError') toast('Não consegui detectar: ' + err.message); }
+    finally { app.exact = null; renderDetector(); }
+  },
   'idea-add'() {
     const s = st(); if (!s) return; const sc = s.scenes[curScene()];
     if (edit().ideas.some((i) => i.a < sc.b && i.b > sc.a)) { toast('Essa cena já está numa ideia.'); return; }
@@ -681,6 +723,8 @@ function kfDbl(ev) {
 }
 
 export function bind() {
+  const ml = $('#masklayer'); ml.addEventListener('pointerdown', maskDown); window.addEventListener('pointermove', maskMove); window.addEventListener('pointerup', maskUp);
+  ml.addEventListener('click', (ev) => { if (ev.target.closest('[data-mh]')) ev.stopPropagation(); });
   const tl = $('#tl-card');
   tl.addEventListener('pointerdown', onPointerDown); window.addEventListener('pointermove', onPointerMove); window.addEventListener('pointerup', onPointerUp);
   tl.addEventListener('click', laneClick);
@@ -698,9 +742,46 @@ export function bind() {
 }
 
 export function render() {
+  renderMaskLayer();
   renderRail(); renderEfeitos(); renderMonitorBar(); renderPalette(); renderDetector(); renderAutofx(); renderTimeline(); renderInspector(); timecode();
 }
 export { refreshLib, openOverlayPicker };
+
+// ---------- seta: alças da máscara em cima do vídeo ----------
+export function renderMaskLayer() {
+  const L = $('#masklayer'); if (!L) return;
+  const it = selItem();
+  if (!it || it.kind !== 'mk' || app.view !== 'video' || !app.ui.fxPreview) { L.innerHTML = ''; L.classList.remove('on'); return; }
+  const t = video.currentTime; const s = K.shapeAt(it, t); const inside = t >= it.a && t < it.b;
+  const onKf = it.shapeKf.some((k) => Math.abs(k.t - t) < 0.02);
+  L.classList.add('on');
+  const l = s.x - s.w / 2; const tp = s.y - s.h / 2; const P = (x, y) => `left:${x * 100}%;top:${y * 100}%`;
+  const pts = { nw: [l, tp], n: [s.x, tp], ne: [l + s.w, tp], w: [l, s.y], e: [l + s.w, s.y], sw: [l, tp + s.h], s: [s.x, tp + s.h], se: [l + s.w, tp + s.h] };
+  L.innerHTML = `<div class="mbox${Math.round(it.params.shape) === 1 ? ' ell' : ''}${inside ? '' : ' out'}" data-mh="move" style="${P(l, tp)};width:${s.w * 100}%;height:${s.h * 100}%"></div>
+    <div class="mframe" style="${P(l, tp)};width:${s.w * 100}%;height:${s.h * 100}%"><span class="mtag">${K.maskType(it.key).name}${onKf ? ' · ◆' : ''}</span></div>
+    ${Object.entries(pts).map(([h, [x, y]]) => `<i data-mh="${h}" class="mh ${h}" style="${P(x, y)}"></i>`).join('')}`;
+}
+let md = null;
+function maskDown(ev) {
+  const h = ev.target.closest('[data-mh]'); if (!h) return; const it = selItem(); if (!it || it.kind !== 'mk') return;
+  const L = $('#masklayer').getBoundingClientRect(); const t = video.currentTime;
+  md = { id: it.id, h: h.dataset.mh, x0: ev.clientX, y0: ev.clientY, L, s0: K.shapeAt(it, t), t };
+  video.pause(); h.setPointerCapture && h.setPointerCapture(ev.pointerId); ev.preventDefault(); ev.stopPropagation();
+}
+function maskMove(ev) {
+  if (!md) return;
+  const dx = (ev.clientX - md.x0) / md.L.width; const dy = (ev.clientY - md.y0) / md.L.height; const s = { ...md.s0 }; const h = md.h;
+  if (h === 'move') { s.x += dx; s.y += dy; }
+  else {
+    let l = s.x - s.w / 2; let r = s.x + s.w / 2; let tp = s.y - s.h / 2; let bt = s.y + s.h / 2;
+    if (h.includes('w')) l += dx; if (h.includes('e')) r += dx; if (h.includes('n')) tp += dy; if (h.includes('s')) bt += dy;
+    if (r - l < 0.03) r = l + 0.03; if (bt - tp < 0.03) bt = tp + 0.03;
+    s.x = (l + r) / 2; s.w = r - l; s.y = (tp + bt) / 2; s.h = bt - tp;
+  }
+  mutLight('Mover máscara', (e) => { const i = e.fx.findIndex((f) => f.id === md.id); e.fx[i] = K.setShapeAt(e.fx[i], md.t, s); return e; }, 'mk:' + md.id + ':' + md.t);
+  renderMaskLayer(); hooks.preview();
+}
+function maskUp() { if (md) { md = null; app.hist.seal(); hooks.renderAll(); } }
 
 // ---------- desenho da prévia (Editar) ----------
 export function sceneCrop(t) {
@@ -723,6 +804,7 @@ export function drawMon() {
   const comps = app.ui.fxPreview ? compsAt(e, M.groupAt(e, t)) : [];
   const info = app.comp.render(cv, { src, sw, sh, t, ratio: app.ratio, ox: sceneCrop(t).ox, fx: e.fx, fxOn: app.ui.fxPreview, comps, overlays: app.overlays, W: w, H: h });
   hooks.afterDraw && hooks.afterDraw(info, t);
+  if (selItem() && selItem().kind === 'mk' && !md) renderMaskLayer();
   updateChips(info);
   const now = performance.now();
   if (now - palAt > 700) { palAt = now; try { const sm = sampleCanvas(cv, 64); app.palCur = extractPalette(sm.data); renderPalette(); } catch (err) { /* ignora */ } }

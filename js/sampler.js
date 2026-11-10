@@ -66,3 +66,46 @@ export async function sampleVideo(src, { onProgress, signal } = {}) {
   }
   return { duration, step, series, thumbs };
 }
+
+// Quadros por segundo de verdade: toca um instante e mede o intervalo entre quadros apresentados.
+async function measureFps(v) {
+  if (!v.requestVideoFrameCallback) return 30;
+  const times = [];
+  await new Promise((resolve) => {
+    let n = 0; const stop = () => { v.pause(); resolve(); };
+    const cb = (now, meta) => { times.push(meta.mediaTime); if (++n < 14) v.requestVideoFrameCallback(cb); else stop(); };
+    v.requestVideoFrameCallback(cb); v.play().catch(stop); setTimeout(stop, 2500);
+  });
+  const d = []; for (let i = 1; i < times.length; i++) { const x = times[i] - times[i - 1]; if (x > 0.004) d.push(x); }
+  if (d.length < 3) return 30;
+  d.sort((a, b) => a - b); const fps = 1 / d[d.length >> 1];
+  const std = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 100, 119.88, 120].sort((a, b) => Math.abs(a - fps) - Math.abs(b - fps))[0];
+  return Math.abs(std - fps) / std < 0.04 ? std : Math.round(fps);
+}
+
+// Leva cada corte pro quadro exato da mudança: olha quadro a quadro numa janela em volta e pega o maior salto.
+export async function refineCuts(src, cuts, { win = 0.3, onProgress, signal } = {}) {
+  const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = src;
+  await once(v, 'loadedmetadata', 15000);
+  const fps = await measureFps(v);
+  const W2 = 64; const H2 = 36; const c = document.createElement('canvas'); c.width = W2; c.height = H2;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  const gray = () => { const px = g.getImageData(0, 0, W2, H2).data; const out = new Uint8Array(W2 * H2); for (let i = 0, j = 0; i < px.length; i += 4, j++) out[j] = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) | 0; return out; };
+  const step = 1 / fps; const out = [];
+  try {
+    for (let k = 0; k < cuts.length; k++) {
+      if (signal && signal.aborted) throw new DOMException('cancelado', 'AbortError');
+      const c0 = cuts[k]; let prev = null; let best = { d: -1, f: Math.round(c0 * fps) };
+      const f0 = Math.max(1, Math.floor((c0 - win) * fps)); const f1 = Math.min(Math.floor((v.duration - 0.01) * fps), Math.ceil((c0 + win) * fps));
+      for (let f = f0 - 1; f <= f1; f++) {
+        await seek(v, Math.min(v.duration - 0.01, (f + 0.5) * step)); // meio do quadro: sem ambiguidade
+        g.drawImage(v, 0, 0, W2, H2); const cur = gray();
+        if (prev) { const d = frameDiff(prev, cur); if (d > best.d) best = { d, f }; }
+        prev = cur;
+      }
+      out.push(Math.round((best.f / fps) * 1000) / 1000);
+      if (onProgress) onProgress((k + 1) / cuts.length);
+    }
+  } finally { v.removeAttribute('src'); v.load(); }
+  return { cuts: out, fps };
+}

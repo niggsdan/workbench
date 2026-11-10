@@ -53,6 +53,7 @@
           <div class="mon-top">
             <div class="seg" id="plats" role="group" aria-label="Plataforma"></div>
             <div class="mon-top-r">
+              <div class="seg sm" id="mtools" role="group" aria-label="Ferramentas no vídeo"></div>
               <button type="button" class="btn sm style-pill" id="style-pill" data-act="style-open"></button>
               <div class="seg sm" id="ratios" role="group" aria-label="Formato da prévia"></div>
             </div>
@@ -61,18 +62,17 @@
             <div class="stage" id="stage">
               <div class="frame" id="frame">
                 <canvas id="cv-mon" aria-label="Prévia do vídeo com efeitos e cor"></canvas>
+                <div class="masklayer" id="masklayer" aria-hidden="true"></div>
                 <div class="chip chip-l" id="fx-chip" hidden></div>
                 <div class="chip chip-r" id="scene-chip" hidden></div>
                 <div class="audio-card" id="audio-card" hidden><strong>Áudio</strong><span id="audio-name"></span></div>
               </div>
               <div class="empty" id="empty">
                 <div class="empty-title">Comece pelo teu material</div>
-                <div class="empty-sub">Qualquer vídeo, áudio ou imagem. O arquivo fica no teu computador, nada é enviado.</div>
+                <div class="empty-sub">Qualquer vídeo, áudio ou foto, inclusive de Osmo, Lumix e RAW. O arquivo fica no teu computador, nada é enviado.</div>
                 <div class="starts">
-                  <button type="button" class="start" data-act="add-files"><b>Adicionar arquivos</b><span>Vídeo, áudio, imagem. Qualquer formato.</span></button>
-                  <button type="button" class="start" data-act="add-folder"><b>Pasta do computador</b><span>Drive for Desktop ou qualquer pasta, com Falas, Cenas e Overlays.</span></button>
-                  <button type="button" class="start" data-act="drive-connect"><b>Conectar Google Drive</b><span>Entra na tua conta e escolhe a pasta.</span></button>
-                  <button type="button" class="start" data-act="drive-link"><b>Colar link do Drive</b><span>Link de uma pasta do Drive.</span></button>
+                  <button type="button" class="start" data-act="add-files"><b>Adicionar arquivos</b><span>Vídeo, áudio, foto. Qualquer formato.</span></button>
+                  <button type="button" class="start" data-act="add-folder"><b>Pasta do computador</b><span>Qualquer pasta, com Falas, Cenas e Overlays.</span></button>
                 </div>
                 <div id="resume"></div>
                 <div class="empty-sub">Ou arraste arquivos e pastas pra qualquer lugar da tela.</div>
@@ -90,13 +90,17 @@
             <div class="mon-right"><span class="muted ell" id="analysis" role="status"></span><button type="button" class="link-btn" id="fxprev" data-act="fxprev" aria-pressed="true">Prévia com efeitos e cor</button></div>
           </div>
         </section>
-
-        <section class="card detector" id="detector" aria-label="Detector de cenas"></section>
-        <section class="card autofx" id="autofx" aria-label="Sugestões automáticas"></section>
-        <section class="card timeline" id="tl-card" aria-label="Timeline"></section>
       </div>
 
       <aside class="col-right"><div class="card inspector" id="inspector" aria-label="Inspetor"></div></aside>
+
+      <div class="bottom">
+        <section class="card tl-wrap" aria-label="Timeline">
+          <div class="detector" id="detector" aria-label="Detector de cenas"></div>
+          <div class="autofx" id="autofx" aria-label="Sugestões automáticas"></div>
+          <div id="tl-card" class="timeline"></div>
+        </section>
+      </div>
     </section>
 
     <!-- ===================== COR ===================== -->
@@ -111,10 +115,12 @@
           <section class="card viewer" id="c-viewer" aria-label="Visualizador"></section>
           <div class="scopes" id="c-scopes"></div>
         </div>
+      </div>
+      <aside class="col-right"><div class="card inspector" id="c-insp" aria-label="Inspetor de cor"></div></aside>
+      <div class="bottom cor-bottom">
         <section class="card nodes" id="c-nodes" aria-label="Nós"></section>
         <section class="card shots" id="c-shots" aria-label="Grades por grupo de cenas"></section>
       </div>
-      <aside class="col-right"><div class="card inspector" id="c-insp" aria-label="Inspetor de cor"></div></aside>
     </section>
 
     <!-- ===================== ENTREGA ===================== -->

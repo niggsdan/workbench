@@ -1,9 +1,11 @@
 // Compositor: desenha um quadro final (reenquadre + efeitos + cor + textura + overlay + texto) num canvas.
 // Serve a prévia (Editar e Cor) e o render da Entrega, com o mesmo código.
 
-import { fxState, textureState } from './fx.js';
+import { fxState, textureState, BLENDS } from './fx.js';
+import { shapeAt } from './masks.js';
 import { applyGrade, bloom } from './grade.js';
 
+function mulberry(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const mk = (w = 2, h = 2) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
 const ctx2 = (c) => c.getContext('2d', { willReadFrequently: true });
 
@@ -26,6 +28,97 @@ export class Compositor {
     this.small = mk(); this.small2 = mk(); this.scratch = mk(); this.scratch2 = mk();
     this.ring = []; this.ringT = null; this.hold = mk(); this.holdN = 0; this.mosh = mk(); this.moshOk = false; this.stut = { id: null, frames: [], n: 0 };
     this.fishKey = ''; this.fishMap = null;
+  }
+
+  // ---------- máscara ----------
+  maskCanvas(W, H, s, ellipse, featherPx, invert) {
+    const c = this.mc || (this.mc = mk()); c.width = W; c.height = H; const g = ctx2(c);
+    const path = new Path2D(); const cx = s.x * W; const cy = s.y * H; const w = s.w * W; const h = s.h * H;
+    if (ellipse) path.ellipse(cx, cy, Math.max(1, w / 2), Math.max(1, h / 2), 0, 0, Math.PI * 2); else path.rect(cx - w / 2, cy - h / 2, w, h);
+    g.clearRect(0, 0, W, H);
+    if (invert) { g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.globalCompositeOperation = 'destination-out'; }
+    g.filter = featherPx > 0.5 ? 'blur(' + featherPx + 'px)' : 'none'; g.fillStyle = '#fff'; g.fill(path);
+    g.filter = 'none'; g.globalCompositeOperation = 'source-over';
+    return c;
+  }
+  mask(g, canvas, W, H, it, t) {
+    const s = shapeAt(it, t); const P = it.params; const ell = Math.round(P.shape) === 1; const inv = !!Math.round(P.invert || 0);
+    const fpx = (P.feather / 100) * Math.min(s.w * W, s.h * H) * 0.5; const amt = P.amount / 100;
+    const layer = this.ml || (this.ml = mk()); layer.width = W; layer.height = H; const lg = ctx2(layer);
+    if (it.key === 'blur') {
+      lg.filter = 'blur(' + Math.max(1, amt * 28 * (W / 640)) + 'px)'; lg.drawImage(canvas, 0, 0); lg.filter = 'none';
+      lg.globalCompositeOperation = 'destination-in'; lg.drawImage(this.maskCanvas(W, H, s, ell, fpx, inv), 0, 0); lg.globalCompositeOperation = 'source-over';
+      g.drawImage(layer, 0, 0);
+    } else {
+      // escurece o lado de fora (inverter: o de dentro)
+      lg.fillStyle = '#000'; lg.fillRect(0, 0, W, H);
+      lg.globalCompositeOperation = 'destination-in'; lg.drawImage(this.maskCanvas(W, H, s, ell, fpx, !inv), 0, 0); lg.globalCompositeOperation = 'source-over';
+      g.save(); g.globalAlpha = it.key === 'crop' ? 1 : it.key === 'spot' ? amt * 0.7 : amt; g.drawImage(layer, 0, 0); g.restore();
+      if (it.key === 'spot') { lg.clearRect(0, 0, W, H); lg.fillStyle = 'rgba(255,240,220,1)'; lg.fillRect(0, 0, W, H); lg.globalCompositeOperation = 'destination-in'; lg.drawImage(this.maskCanvas(W, H, s, ell, fpx, inv), 0, 0); lg.globalCompositeOperation = 'source-over'; g.save(); g.globalCompositeOperation = 'soft-light'; g.globalAlpha = amt * 0.6; g.drawImage(layer, 0, 0); g.restore(); }
+    }
+  }
+
+  // ---------- texturas animadas geradas aqui ----------
+  noiseTile(kind) {
+    this.texCache = this.texCache || {};
+    if (this.texCache[kind]) return this.texCache[kind];
+    const N = 384; const out = [];
+    const rnd = mulberry(kind === 'paper' ? 7 : 11);
+    for (let v = 0; v < 3; v++) {
+      const c = mk(N, N); const g = ctx2(c); const im = g.createImageData(N, N); const d = im.data;
+      const grid = (sz) => { const G2 = []; for (let i = 0; i < (sz + 1) * (sz + 1); i++) G2.push(rnd()); return (x, y) => { const fx = x * sz; const fy = y * sz; const ix = Math.floor(fx) % sz; const iy = Math.floor(fy) % sz; const tx = fx - Math.floor(fx); const ty = fy - Math.floor(fy); const s = (t) => t * t * (3 - 2 * t); const a = G2[iy * (sz + 1) + ix]; const b = G2[iy * (sz + 1) + ix + 1]; const c2 = G2[(iy + 1) * (sz + 1) + ix]; const e = G2[(iy + 1) * (sz + 1) + ix + 1]; return a + (b - a) * s(tx) + (c2 - a) * s(ty) + (a - b - c2 + e) * s(tx) * s(ty); }; };
+      const o = [grid(4), grid(9), grid(23), grid(61), grid(150)];
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const u = x / N; const w = y / N; let n;
+        if (kind === 'paper') { n = 0.55 * o[3](u, w) + 0.3 * o[4](u, w) + 0.15 * o[1](u, w); n = 200 + (n - 0.5) * 120; }
+        else { n = 0.5 * o[0](u, w) + 0.3 * o[1](u, w) + 0.2 * o[2](u, w); n = n > 0.58 ? 255 - (n - 0.58) * 900 : 255; }
+        const i = (y * N + x) * 4; d[i] = d[i + 1] = d[i + 2] = Math.max(0, Math.min(255, n)); d[i + 3] = 255;
+      }
+      g.putImageData(im, 0, 0); out.push(c);
+    }
+    this.texCache[kind] = out; return out;
+  }
+  tileTex(g, W, H, kind, k, mode, rate, t) {
+    const tiles = this.noiseTile(kind); const fr = Math.floor(t * rate); const tile = tiles[fr % tiles.length];
+    const sc = Math.max(W, H) / 384 * (kind === 'paper' ? 0.9 : 1.6); const ox = -((fr * 97) % 384) * sc * 0.5; const oy = -((fr * 53) % 384) * sc * 0.5;
+    g.save(); g.globalCompositeOperation = mode; g.globalAlpha = Math.min(1, k);
+    for (let y = oy; y < H; y += 384 * sc) for (let x = ox; x < W; x += 384 * sc) g.drawImage(tile, x, y, 384 * sc + 1, 384 * sc + 1);
+    g.restore();
+  }
+  scratches(g, W, H, k) {
+    g.save();
+    const n = 1 + Math.floor(Math.random() * 4 * k);
+    for (let i = 0; i < n; i++) { const x = Math.random() * W; g.strokeStyle = Math.random() < 0.7 ? 'rgba(255,255,255,' + (0.25 + 0.5 * k) + ')' : 'rgba(0,0,0,' + (0.3 + 0.5 * k) + ')'; g.lineWidth = Math.max(1, W / 500) * (1 + Math.random() * 2); g.beginPath(); g.moveTo(x, 0); let xx = x; for (let y = 0; y <= H; y += H / 8) { xx += (Math.random() - 0.5) * W * 0.004; g.lineTo(xx, y); } g.stroke(); }
+    if (Math.random() < 0.25 * k) { g.strokeStyle = 'rgba(10,10,10,.75)'; g.lineWidth = Math.max(1, W / 700); g.beginPath(); const x0 = Math.random() * W; const y0 = Math.random() * H; g.moveTo(x0, y0); g.bezierCurveTo(x0 + W * 0.05, y0 - H * 0.08, x0 - W * 0.04, y0 + H * 0.1, x0 + W * 0.06, y0 + H * 0.12); g.stroke(); }
+    g.restore();
+  }
+  burn(g, W, H, k, t) {
+    g.save(); g.globalCompositeOperation = 'screen';
+    const m = Math.max(W, H);
+    for (let i = 0; i < 3; i++) {
+      const ph = t * (0.35 + i * 0.17) + i * 2.1; const ex = (Math.sin(ph) > 0 ? 1 : 0) * W; const ey = (0.5 + 0.5 * Math.sin(ph * 1.3 + i)) * H;
+      const r = m * (0.25 + 0.25 * (0.5 + 0.5 * Math.sin(ph * 2.1))) * k;
+      const gr = g.createRadialGradient(ex, ey, 0, ex, ey, r); gr.addColorStop(0, 'rgba(255,250,235,' + 0.9 * k + ')'); gr.addColorStop(0.35, 'rgba(255,140,40,' + 0.7 * k + ')'); gr.addColorStop(1, 'rgba(160,20,0,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    }
+    g.restore();
+  }
+  bokehFx(g, W, H, k, t) {
+    g.save(); g.globalCompositeOperation = 'screen'; const m = Math.min(W, H); const rnd = mulberry(5);
+    for (let i = 0; i < 14; i++) {
+      const sp = 0.01 + rnd() * 0.03; const x = ((rnd() + t * sp) % 1) * W; const y = ((rnd() + Math.sin(t * 0.3 + i) * 0.03) % 1) * H; const r = m * (0.03 + rnd() * 0.07);
+      const hue = 25 + rnd() * 30; const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, 'hsla(' + hue + ',90%,75%,' + 0.35 * k + ')'); gr.addColorStop(0.8, 'hsla(' + hue + ',90%,65%,' + 0.25 * k + ')'); gr.addColorStop(1, 'hsla(' + hue + ',90%,60%,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+    }
+    g.restore();
+  }
+  halftone(g, canvas, W, H, k) {
+    const cell = Math.max(4, Math.round(Math.min(W, H) / 90)); const cw = Math.ceil(W / cell); const ch = Math.ceil(H / cell);
+    this.small.width = cw; this.small.height = ch; const sg = ctx2(this.small); sg.drawImage(canvas, 0, 0, cw, ch); const d = sg.getImageData(0, 0, cw, ch).data;
+    const c = this.scratch2; c.width = W; c.height = H; const hg = ctx2(c); hg.fillStyle = '#fff'; hg.fillRect(0, 0, W, H); hg.fillStyle = '#111';
+    for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) { const i = (y * cw + x) * 4; const l = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255; const r = (1 - l) * cell * 0.62; if (r > 0.3) { hg.beginPath(); hg.arc(x * cell + cell / 2, y * cell + cell / 2, r, 0, 7); hg.fill(); } }
+    g.save(); g.globalCompositeOperation = 'multiply'; g.globalAlpha = Math.min(1, k); g.drawImage(c, 0, 0); g.restore();
   }
 
   // ---------- auxiliares dos efeitos do Eyecandy ----------
@@ -243,6 +336,8 @@ export class Compositor {
     const bl = hala.map((h) => ({ ...h })); if (amountExtra > 0) bl.push({ amount: amountExtra, radius: 0.4, thr: 0.62 });
     for (const h of bl) this.halation(g, canvas, W, H, h);
 
+    // máscaras desenhadas no vídeo (desfoque, recorte, máscara, destaque)
+    for (const it of items) if (it.kind === 'mk' && cfg.t >= it.a && cfg.t < it.b) this.mask(g, canvas, W, H, it, cfg.t);
     // lente e textura
     if (tex.softness) { // suavidade: cópia desfocada por redução
       const sw2 = Math.max(8, W >> 3); const sh2 = Math.max(8, H >> 3);
@@ -258,6 +353,12 @@ export class Compositor {
       g.restore();
     }
     if (tex.dust) this.dust(g, W, H, tex.dust / 100);
+    if (tex.paper) this.tileTex(g, W, H, 'paper', tex.paper / 100, 'multiply', 12, cfg.t);
+    if (tex.grunge) this.tileTex(g, W, H, 'grunge', tex.grunge / 100, 'multiply', 6, cfg.t);
+    if (tex.scratch) this.scratches(g, W, H, tex.scratch / 100);
+    if (tex.burn) this.burn(g, W, H, tex.burn / 100, cfg.t);
+    if (tex.bokeh) this.bokehFx(g, W, H, tex.bokeh / 100, cfg.t);
+    if (tex.halftone) this.halftone(g, canvas, W, H, tex.halftone / 100);
     if (tex.leak) this.leak(g, W, H, tex.leak / 100, cfg.t);
     if (tex.vignette) {
       const gr = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.hypot(W, H) * 0.55);
@@ -283,10 +384,17 @@ export class Compositor {
     for (const it of items) {
       if (it.kind !== 'ov' || cfg.t < it.a || cfg.t >= it.b) continue;
       const v = cfg.overlays && cfg.overlays.get(it.lib);
-      if (!v || !v.videoWidth) continue;
-      const s = it.params.scale / 100; const oa = v.videoWidth / v.videoHeight;
+      const vw = v && (v.videoWidth || v.naturalWidth); const vh = v && (v.videoHeight || v.naturalHeight);
+      if (!vw) continue;
+      const anim = Math.round(it.params.anim || 0); const s = it.params.scale / 100 * (anim === 1 ? 1.08 : 1); const oa = vw / vh;
       let w = W * s; let h = w / oa; if (h < H * s) { h = H * s; w = h * oa; }
-      g.save(); g.globalCompositeOperation = 'screen'; g.globalAlpha = it.params.opacity / 100; g.drawImage(v, (W - w) / 2, (H - h) / 2, w, h); g.restore();
+      let x = (W - w) / 2; let y = (H - h) / 2; let fx2 = 1; let fy2 = 1;
+      if (anim === 1) { const fr = Math.floor(cfg.t * 12 * (it.params.speed / 100)); const rnd = (k) => { const z = Math.sin(fr * 12.9898 + k * 78.233) * 43758.5453; return z - Math.floor(z); }; x += (rnd(1) - 0.5) * (w - W); y += (rnd(2) - 0.5) * (h - H); fx2 = rnd(3) < 0.5 ? -1 : 1; fy2 = rnd(4) < 0.5 ? -1 : 1; }
+      else if (anim === 2) { const dx = ((cfg.t - it.a) * 0.04 * (it.params.speed / 100) * W) % w; x = -dx; }
+      g.save(); g.globalCompositeOperation = BLENDS[Math.round(it.params.blend || 0)] || 'screen'; g.globalAlpha = it.params.opacity / 100;
+      if (fx2 < 0 || fy2 < 0) { g.translate(x + w / 2, y + h / 2); g.scale(fx2, fy2); g.drawImage(v, -w / 2, -h / 2, w, h); }
+      else { g.drawImage(v, x, y, w, h); if (anim === 2) g.drawImage(v, x + w, y, w, h); }
+      g.restore();
     }
     // textos
     for (const it of items) if (it.kind === 'tt' && cfg.t >= it.a && cfg.t < it.b) this.text(g, W, H, it);

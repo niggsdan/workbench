@@ -1,7 +1,8 @@
 // Painel Material: entrada de arquivos, pasta, Drive, conversão universal e download.
 import { app, $, esc, fmtClock, say, hooks, toast } from './store.js';
-import { ROLES, downloadName, parseDriveLink, fmtSize } from './media.js';
-import { probe, convert } from './convert.js';
+import { ROLES, downloadName, parseDriveLink, fmtSize, extOf, isRaw, RAW_BRAND } from './media.js';
+import { probe, convert, inspect, audioOk } from './convert.js';
+import { rawPreview } from './raw.js';
 import { entriesFromFiles, canPickFolder, pickFolder } from './sources.js';
 import * as Drive from './drive.js';
 import { GOOGLE_API_KEY } from './config.js';
@@ -15,8 +16,8 @@ function statusText(it) {
     case 'verificando': return 'verificando…';
     case 'baixando': return 'baixando ' + Math.round(it.progress * 100) + '%';
     case 'convertendo': return 'convertendo ' + Math.round(it.progress * 100) + '%';
-    case 'pronto': return 'pronto';
-    case 'convertido': return 'convertido p/ MP4';
+    case 'pronto': return it.raw || 'pronto';
+    case 'convertido': return it.note || 'convertido p/ MP4';
     case 'erro': return it.note || 'erro';
     default: return it.kind === 'other' ? 'arquivo' : '';
   }
@@ -36,7 +37,7 @@ export function renderMaterial() {
     const st = statusText(it); if (st) parts.push(st);
     if (it.id === app.activeId && app.hist) parts.push(app.hist.current.scenes.length + ' cenas');
     const busy = it.status === 'convertendo' || it.status === 'baixando';
-    return `<div class="tree-row file${it.id === app.activeId ? ' on' : ''}" style="padding-left:34px;padding-right:4px" data-act="${it.kind === 'other' ? 'noop' : 'open'}" data-id="${it.id}" title="${esc(it.path)}">
+    return `<div class="tree-row file${it.id === app.activeId ? ' on' : ''}" style="padding-left:34px;padding-right:4px" data-act="${it.kind === 'other' ? 'noop' : 'open'}" data-id="${it.id}" title="${esc(it.path + (it.info ? '\n' + it.info : ''))}">
       <span class="sq" style="background:${it.kind === 'video' ? '#7b8088' : it.kind === 'audio' ? '#9aa0a8' : it.kind === 'image' ? '#b6bbc2' : '#565c64'}"></span>
       <span class="nm ell">${esc(it.name)}</span><span class="meta${it.status === 'erro' ? ' err' : ''}">${esc(parts.join(' · '))}</span>
       <button type="button" class="dl" data-act="download" data-id="${it.id}" title="Baixar o original" aria-label="Baixar ${esc(it.name)}">⬇</button>
@@ -47,8 +48,8 @@ export function renderMaterial() {
       + ROLES.filter((r) => g[r].length).map((r) => `<div class="tree-row folder" style="padding-left:20px"><span class="sq" style="background:${ROLE_DOT[r]}"></span><span class="nm">${r}</span><span class="meta">${g[r].length}</span></div>${g[r].map(row).join('')}`).join('')
     : '<div class="note" style="padding:14px 6px;line-height:1.5">Nada aqui ainda. Use os botões acima ou arraste arquivos e pastas pra tela. Pastas chamadas Falas, Cenas e Overlays são separadas sozinhas.</div>';
   el.innerHTML = `
-    <div class="p-head"><div class="p-title"><h2 class="tool">Material</h2><span class="pill-tag">${lib.items.length ? (app.source === 'drive' ? 'Drive ligado' : app.source === 'pasta' ? 'Pasta ligada' : 'Upload') : 'Sem pasta'}</span></div>
-      <div class="p-btns"><button type="button" class="btn" data-act="drive-connect">Drive</button><button type="button" class="btn" data-act="drive-link">Link da pasta</button><button type="button" class="btn" data-act="add-files">Upload</button><button type="button" class="btn" data-act="add-folder">Pasta</button></div></div>
+    <div class="p-head"><div class="p-title"><h2 class="tool">Material</h2><span class="pill-tag">${lib.items.length ? (app.source === 'pasta' ? 'Pasta ligada' : 'Upload') : 'Vazio'}</span></div>
+      <div class="p-btns"><button type="button" class="btn" data-act="add-files">Upload</button><button type="button" class="btn" data-act="add-folder">Pasta</button></div></div>
     <div class="p-list">${tree}</div>
     <div class="p-foot">Qualquer tipo de arquivo entra. Arquivo novo na pasta entra quando você adiciona de novo.</div>`;
   const list = el.querySelector('.p-list'); if (list) list.scrollTop = top;
@@ -71,17 +72,30 @@ async function getFile(it) {
   throw new Error('Arquivo indisponível.');
 }
 
+// Containers de câmera que costumam abrir mas com áudio que o navegador não toca (PCM da Lumix, AC-3 do AVCHD...).
+const SUSPECT = ['mov', 'mts', 'm2ts', 'm2t', 'mxf', 'avi', 'mkv', 'lrf', 'lrv', 'insv', '360', 'dv', 'vob', 'mpg', 'mpeg', 'wmv', 'flv', '3gp', 'hevc', 'h264', 'h265'];
+const describe = (info) => info && info.video ? [info.video.codec.toUpperCase(), info.video.w ? info.video.w + '×' + info.video.h : '', /10le|p010/.test(info.video.pix) ? '10-bit' : '', /422/.test(info.video.pix) ? '4:2:2' : '', info.audio ? 'áudio ' + info.audio.codec.replace(/^pcm_.*/, 'PCM').toUpperCase() : 'sem áudio'].filter(Boolean).join(' · ') : '';
+
 async function ensurePlayable(it, file) {
   if (it.play) return it.play;
   it.status = 'verificando'; renderMaterialSoon();
   const r = await probe(file, it.kind);
-  if (r.ok) { it.play = file; it.duration = r.duration || 0; it.status = 'pronto'; renderMaterialSoon(); return it.play; }
+  let info = null;
+  if (it.kind === 'video' && (!r.ok || SUSPECT.includes(extOf(it.name)) || r.audio === false)) {
+    say('Lendo o formato de ' + it.name + '…');
+    try { info = await inspect(file); it.info = describe(info); } catch (e) { info = null; }
+  }
+  const audioFine = !info || !info.audio || audioOk(info.audio) || r.audio === true;
+  if (r.ok && audioFine) { it.play = file; it.duration = r.duration || 0; it.status = 'pronto'; renderMaterialSoon(); return it.play; }
+  if (r.ok && info) info.forceRemux = true; // o vídeo toca: só troca o áudio, rapidinho
   it.status = 'convertendo'; it.progress = 0;
-  say('Esse formato o navegador não toca direto. Convertendo pra MP4…'); renderMaterialSoon();
-  try { it.converted = await convert(file, it.kind, (p) => { it.progress = p; renderMaterialSoon(); }); } catch (e) {
+  say(r.ok ? 'Ajustando o áudio de ' + it.name + ' (o vídeo fica igual)…' : 'O navegador não toca ' + (it.info || 'esse formato') + '. Convertendo pra MP4…'); renderMaterialSoon();
+  try { it.converted = await convert(file, it.kind, (p) => { it.progress = p; renderMaterialSoon(); }, info); } catch (e) {
     it.status = 'erro'; it.note = 'não converteu'; renderMaterialSoon(); throw new Error('não consegui converter (' + e.message + ')');
   }
-  it.play = it.converted; it.status = 'convertido'; renderMaterialSoon();
+  it.play = it.converted; it.status = 'convertido';
+  it.note = it.converted.plan === 'remux' ? 'áudio ajustado, vídeo original' : it.converted.plan === 'audio' ? 'convertido pra AAC' : 'convertido pra MP4 H.264 (até 1080p)';
+  renderMaterialSoon();
   return it.play;
 }
 
@@ -93,7 +107,15 @@ export async function openItem(id) {
   try {
     const file = await getFile(it);
     if (app.activeId !== id) return;
-    if (it.kind === 'image') { await hooks.loadStill(file, it); return; }
+    if (it.kind === 'image') {
+      let img = file;
+      if (isRaw(it.name)) {
+        it.status = 'verificando'; renderMaterialSoon();
+        const p = await rawPreview(file); img = p.blob;
+        it.raw = 'RAW ' + (RAW_BRAND[extOf(it.name)] || '') + ' · prévia ' + p.width + '×' + p.height; it.status = 'pronto'; renderMaterialSoon();
+      }
+      await hooks.loadStill(img, it); return;
+    }
     const play = await ensurePlayable(it, file);
     if (app.activeId !== id) return;
     if (it.kind === 'audio') { await hooks.loadAudio(play, it); return; }
@@ -259,4 +281,5 @@ export function bindInputs() {
 }
 
 // Garante um Blob tocável de um item (baixa do Drive e converte se precisar).
+export const fileOf = (it) => getFile(it);
 export async function prepareItem(it) { const f = await getFile(it); return ensurePlayable(it, f); }
