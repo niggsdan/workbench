@@ -1,5 +1,5 @@
 // Workbench: liga as telas (Editar, Cor, Entrega), o vídeo, o projeto e o loop de prévia.
-import { app, $, $$, esc, fmtT, video, still, st, edit, commit, mutEdit, hooks, toast, freshHistory, clamp } from './store.js';
+import { app, $, $$, esc, fmtT, video, still, st, edit, commit, mutEdit, mutProj, proj, hooks, toast, freshHistory, clamp } from './store.js';
 import * as P from './project.js';
 import * as M from './model.js';
 import { History } from './history.js';
@@ -25,7 +25,7 @@ function renderHeader() {
   }
   const n = app.lib.items.length; const src = { drive: 'Drive', pasta: 'Pasta', upload: 'Upload' }[app.source] || 'Sem material';
   $('#proj-pill').innerHTML = `<span class="dot"></span><b class="ell">${esc(app.projectName || 'Projeto novo')}</b><small>${src} · ${n} ${n === 1 ? 'arquivo' : 'arquivos'}${app.savedAt ? ' · salvo ' + new Date(app.savedAt).toTimeString().slice(0, 5) : ''}</small>`;
-  const c = edit() ? edit().container : (app.container || 'mp4');
+  const c = proj().container;
   for (const b of $$('#container button')) b.setAttribute('aria-pressed', String(b.dataset.v === c));
   const ex = $('#export-top'); ex.textContent = app.exporting ? 'Exportando…' : 'Exportar';
 }
@@ -130,6 +130,7 @@ async function loadVideo(play, it) {
       app.cands = candidates(series);
       const scenes = P.scenesFromCuts(selectCuts(app.cands, DEFAULT_SENS, duration), duration);
       app.hist = freshHistory(scenes, DEFAULT_SENS, 'Detecção automática');
+      { const e0 = app.hist.items[0].state.edit; const pre = app.pre; for (const k of ['cinema', 'briefing', 'platform', 'container', 'refPal']) e0[k] = JSON.parse(JSON.stringify(pre[k])); }
       const gb = hooks.autoGroups(false) || [];
       app.hist.items[0].state.edit = M.setGroups(app.hist.items[0].state.edit, gb);
       const plat = PLATFORMS.find((p) => p.key === app.hist.current.edit.platform); app.ratio = plat.ratio;
@@ -257,14 +258,14 @@ const appActions = {
       <button type="button" class="opt" data-act="tool" data-name="Briefing"><b>Briefing</b><span>Objetivo, tom, referências e entregas.</span></button>
       <div class="row2"><button type="button" class="btn" data-act="dlg-close">Fechar</button><button type="button" class="btn solid" data-act="rename">Salvar nome</button></div></div>`);
   },
-  rename() { app.projectName = $('#p-name').value.trim(); if (st()) mutEdit('Nome do projeto', (e) => { e.briefing.name = app.projectName; return e; }); $('#dlg').close(); renderAll(); },
+  rename() { app.projectName = $('#p-name').value.trim(); mutProj('Nome do projeto', (e) => { e.briefing.name = app.projectName; return e; }); $('#dlg').close(); renderAll(); },
   resume() {
     const r = P.parseProject(localStorage.getItem('wb.autosave') || ''); if (!r.ok) { toast('O salvamento automático está corrompido: ' + r.error); return; }
     usePending(r.project);
   },
   container(el) {
     const v = el.dataset.v; app.container = v;
-    if (st()) mutEdit('Arquivo: ' + v.toUpperCase(), (e) => { e.container = v; return e; }); else renderHeader();
+    mutProj('Arquivo: ' + v.toUpperCase(), (e) => { e.container = v; return e; });
   },
   export() { if (app.tab !== 'entrega') go('entrega'); Ent.startExport(); },
   pack() {

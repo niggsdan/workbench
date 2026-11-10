@@ -1,5 +1,6 @@
 // Tela Editar: rail, Efeitos, monitor, detector de cenas, Auto-FX, timeline e inspetor.
-import { app, $, $$, esc, p2, fmtT, fmtClock, dsec, dis, N, clone, clamp, video, still, st, edit, commit, mutEdit, say, hooks, toast, compsAt } from './store.js';
+import { app, $, $$, esc, p2, fmtT, fmtClock, dsec, dis, N, clone, clamp, video, still, st, edit, proj, commit, mutEdit, mutProj, say, hooks, toast, compsAt } from './store.js';
+import * as FG from './filmgrab.js';
 import * as P from './project.js';
 import { selectCuts, SENS_LABELS } from './detect.js';
 import * as M from './model.js';
@@ -47,6 +48,15 @@ const fgUrl = (q) => 'https://film-grab.com/?s=' + encodeURIComponent(q);
 const micUrl = (q) => 'https://www.google.com/search?q=' + encodeURIComponent('site:moviesincolor.com ' + q);
 const FLIM_URL = 'https://app.flim.ai/';
 export const refLinks = (q) => `<a href="${fgUrl(q)}" target="_blank" rel="noopener noreferrer">Film Grab</a> · <a href="${FLIM_URL}" target="_blank" rel="noopener noreferrer" title="Busca dentro do Flim (pede conta)">Flim</a> · <a href="${micUrl(q)}" target="_blank" rel="noopener noreferrer">Movies in Color</a>`;
+app.fg = { q: null, items: [], total: 0, page: 0, loading: false, err: '' };
+let fgTimer = 0;
+async function loadFg(q, reset) {
+  const fg = app.fg; if (reset) { fg.q = q; fg.items = []; fg.total = 0; fg.page = 0; fg.err = ''; }
+  fg.loading = true; const page = fg.page + 1; const ask = q;
+  try { const r = await FG.browse(q, page); if (fg.q !== ask) return; fg.items = fg.items.concat(r.items); fg.total = r.total; fg.page = page; }
+  catch (err) { if (fg.q === ask) fg.err = err.message; }
+  finally { if (fg.q === ask) { fg.loading = false; if (app.ui.etab === 'cin') refreshLib(); } }
+}
 const eyeOf = (it) => it.slug || ((EYECANDY.find((r) => r.fx === it.key) || {}).slug);
 function libRows() {
   const q = app.ui.search.trim().toLowerCase();
@@ -59,12 +69,18 @@ function libRows() {
       <a class="eye" href="${EYE_URL + r.slug}" target="_blank" rel="noopener noreferrer" title="Ver ${esc(r.name)} no Eyecandy" aria-label="Ver ${esc(r.name)} no Eyecandy">↗</a><span class="badge ${made ? '' : 'ghost'}">${made ? 'Ajuste' : 'Linguagem'}</span></div>`; }).join('') || '<div class="note" style="padding:10px 6px">Nenhuma técnica com esse nome.</div>';
   }
   if (app.ui.etab === 'cin') {
-    const refs = (e ? e.cinema : M.DEFAULT_CINEMA);
-    const qq = app.ui.search.trim();
-    const look = qq ? `<div class="lib-row find"><span class="t"><b>PROCURAR “${esc(qq.toUpperCase())}”</b><span class="h2">${refLinks(qq)}</span></span>${e ? `<button type="button" class="badge" style="cursor:pointer;border:0" data-act="cin-quick">Adicionar</button>` : ''}</div>` : '';
-    const rows = refs.filter((c) => hit(c.name, c.dir, c.dp, c.year)).map((c) => `<div class="lib-row${app.ui.selRef === c.key ? ' on' : ''}"><button type="button" class="t" data-act="ref-open" data-k="${c.key}"><b>${esc(c.name)}</b><span class="h">${c.dir ? 'Dir. ' + esc(c.dir) : 'Direção não anotada'}${c.year ? ' · ' + esc(c.year) : ''}</span><span class="h2">${refLinks(c.name.toLowerCase())}</span></button>
-      <button type="button" class="badge ${c.state === 'use' ? 'use' : 'ghost'}" style="border:${c.state === 'use' ? '0' : '1px solid #6a7078'};cursor:pointer" data-act="cin-toggle" data-k="${c.key}" title="Clique pra ${c.state === 'use' ? 'guardar' : 'usar no projeto'}">${c.state === 'use' ? 'Em uso' : 'Salvo'}</button></div>`).join('');
-    return look + rows + `<button type="button" class="lib-row" data-act="cin-add"><span class="t"><b>ADICIONAR REFERÊNCIA</b><span class="h">Qualquer filme do Film Grab, Flim ou Movies in Color</span></span><span class="badge ghost">Novo</span></button>`;
+    const P = proj(); const qq = app.ui.search.trim(); const fg = app.fg;
+    if (fg.q !== qq && !fg.loading) loadFg(qq, true);
+    const have = new Set(P.cinema.map((c) => c.fgId).filter(Boolean)); const haveName = new Set(P.cinema.map((c) => c.name.toLowerCase()));
+    const mine = P.cinema.filter((c) => hit(c.name, c.dir, c.dp, c.year)).map((c) => `<div class="lib-row${app.ui.selRef === c.key ? ' on' : ''}"><button type="button" class="t" data-act="ref-open" data-k="${c.key}"><b>${esc(c.name)}</b><span class="h">${c.dir ? 'Dir. ' + esc(c.dir) : 'Direção não anotada'}${c.year ? ' · ' + esc(c.year) : ''}</span>${c.dp ? `<span class="h2">Fotografia: ${esc(c.dp)}</span>` : ''}</button>
+      <button type="button" class="badge ${c.state === 'use' ? 'use' : 'ghost'}" style="border:${c.state === 'use' ? '0' : '1px solid #6a7078'};cursor:pointer" data-act="cin-toggle" data-k="${c.key}" title="Clique pra ${c.state === 'use' ? 'tirar do projeto' : 'usar no projeto'}">${c.state === 'use' ? 'Em uso' : 'Salvo'}</button></div>`).join('');
+    const fgRows = fg.items.map((f, i) => { const on = have.has(f.fgId) || haveName.has(f.name.toLowerCase()); return `<div class="lib-row"><a class="t" href="${f.url}" target="_blank" rel="noopener noreferrer" title="Ver os stills no Film Grab"><b>${esc(f.name.toUpperCase())}</b><span class="h">${f.dir ? 'Dir. ' + esc(f.dir) : ''}${f.year ? (f.dir ? ' · ' : '') + f.year : ''}${f.aspect ? ' · ' + esc(f.aspect) : ''}</span>${f.dp ? `<span class="h2">Fotografia: ${esc(f.dp)}</span>` : ''}</a>
+      <button type="button" class="badge ${on ? 'ghost' : ''}" style="cursor:pointer;border:${on ? '1px solid #6a7078' : '0'}" data-act="fg-add" data-i="${i}" ${on ? 'disabled' : ''}>${on ? 'Na lista' : 'Adicionar'}</button></div>`; }).join('');
+    const fgHead = `<div class="lib-sec">Acervo Film Grab${fg.total ? ' · ' + fg.total.toLocaleString('pt-BR') + (qq ? ' resultados' : ' filmes') : ''}</div>`;
+    const fgBody = fg.err ? `<div class="note" style="padding:8px 6px">Não consegui falar com o Film Grab (${esc(fg.err)}). Busque direto: ${refLinks(qq || 'cinema')}</div>`
+      : fgRows + (fg.loading ? '<div class="note" style="padding:8px 6px">Buscando no Film Grab…</div>' : fg.items.length < fg.total ? '<button type="button" class="btn sm" style="width:100%;margin:6px 0" data-act="fg-more">Mostrar mais</button>' : (qq && !fg.items.length ? `<div class="note" style="padding:8px 6px">Nada no Film Grab com “${esc(qq)}”. Tente o nome original em inglês, ou: ${refLinks(qq)}</div>` : ''));
+    return (mine ? `<div class="lib-sec">Tuas referências</div>${mine}` : '') + fgHead + fgBody
+      + `<button type="button" class="lib-row" data-act="cin-add"><span class="t"><b>ADICIONAR À MÃO</b><span class="h">Filme que não está no Film Grab</span></span><span class="badge ghost">Novo</span></button>`;
   }
   const mine = app.lib.items.filter((i) => i.kind === 'video' && i.role === 'Overlays' && hit(i.name));
   return F.TEXTURES.filter((t) => hit(t.name, t.hint)).map((t) => `<button type="button" class="lib-row" data-act="tex-add" data-k="${t.key}"><span class="t"><b>${t.name}</b><span class="h">${t.hint}</span></span><span class="badge ${BADGE[t.badge]}">${t.badge}</span></button>`).join('')
@@ -88,7 +104,7 @@ export function renderMonitorBar() {
   const e = edit();
   $('#plats').innerHTML = F.PLATFORMS.map((p) => `<button type="button" aria-pressed="${e ? e.platform === p.key : p.key === 'tiktok'}" data-act="platform" data-v="${p.key}">${p.label}</button>`).join('');
   $('#ratios').innerHTML = P.RATIOS.map((r) => `<button type="button" data-act="ratio" data-v="${r}" aria-pressed="${r === app.ratio}">${r}</button>`).join('');
-  const use = (e ? e.cinema : M.DEFAULT_CINEMA).filter((c) => c.state === 'use');
+  const use = proj().cinema.filter((c) => c.state === 'use');
   const first = use[0];
   $('#style-pill').textContent = 'Estilo: ' + (first ? titleCase(first.name) + (use.length > 1 ? ' +' + (use.length - 1) : '') : 'nenhum');
   const fp = $('#fxprev'); fp.setAttribute('aria-pressed', String(app.ui.fxPreview));
@@ -97,7 +113,7 @@ export function renderMonitorBar() {
 
 const sw = (cols) => '<div class="sw">' + cols.map((c) => `<i style="background:${c}"></i>`).join('') + '</div>';
 export function renderPalette() {
-  const cur = app.palCur; const e0 = edit(); const ref = (e0 && M.refPalette(e0)) || EX_PAL; const refName = e0 && (e0.cinema.find((c) => c.state === 'use' && c.pal) || {}).name;
+  const cur = app.palCur; const e0 = proj(); const ref = (e0 && M.refPalette(e0)) || EX_PAL; const refName = e0 && (e0.cinema.find((c) => c.state === 'use' && c.pal) || {}).name;
   const blk = (p) => ['Claros', 'Médios', 'Escuros'].map((l, i) => `<div class="lb">${l}</div>${sw(p ? p[i] : [])}`).join('');
   $('#pal').innerHTML = `<div><div class="t">Teu material · cena atual</div>${blk(cur)}</div>
     <div><div class="t">Referência</div><div class="s">${refName ? 'Paleta de ' + esc(titleCase(refName)) : e0 && e0.refPal ? 'Paleta anotada por você' : 'Exemplo, a paleta é anotada por você'}</div>${blk(ref)}</div>
@@ -366,8 +382,8 @@ function refHtml(c) {
   const f = (k, l, ph = '') => `<div class="field">${l}<input type="text" value="${esc(c[k] || '')}" placeholder="${ph}" data-act="ref-field" data-k="${k}" data-ref="${c.key}"></div>`;
   const pal = c.pal ? ['Claros', 'Médios', 'Escuros'].map((l, i) => `<div class="note">${l}</div><div class="sw">${c.pal[i].map((h) => `<i style="background:${h}"></i>`).join('')}</div>`).join('') : '<div class="note">Sem paleta ainda. Tire de um still do filme (salve a imagem do Film Grab e carregue aqui).</div>';
   return `<div class="chips"><span class="kchip">Referência de cinema</span>${c.state === 'use' ? '<span class="kchip o">Em uso no projeto</span>' : ''}</div><h3 class="big">${esc(titleCase(c.name))}</h3>
-    <div class="note">${refLinks(c.name.toLowerCase())}</div>
-    <div style="display:flex;flex-direction:column;gap:8px">${f('name', 'Filme')}${f('dir', 'Direção')}${f('year', 'Ano', 'Ex.: 2002')}${f('dp', 'Direção de fotografia')}
+    <div class="note">${c.url && /film-grab/.test(c.url) ? `<a href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">Stills no Film Grab ↗</a> · <a href="https://app.flim.ai/" target="_blank" rel="noopener noreferrer">Flim</a> · <a href="https://www.google.com/search?q=${encodeURIComponent('site:moviesincolor.com ' + c.name.toLowerCase())}" target="_blank" rel="noopener noreferrer">Movies in Color</a>` : refLinks(c.name.toLowerCase())}</div>
+    <div style="display:flex;flex-direction:column;gap:8px">${f('name', 'Filme')}${f('dir', 'Direção')}${f('year', 'Ano', 'Ex.: 2002')}${f('dp', 'Direção de fotografia')}${f('aspect', 'Proporção de tela', 'Ex.: 2.39:1')}${f('pd', 'Direção de arte')}${f('costume', 'Figurino')}${f('country', 'País')}
     <div class="field">Notas de luz, cor e enquadramento<textarea data-act="ref-field" data-k="notes" data-ref="${c.key}" rows="4" placeholder="Ex.: contraluz quente, sombras verdes, câmera na mão">${esc(c.notes || '')}</textarea></div></div>
     <div><h3>Paleta anotada</h3><div style="margin-top:6px">${pal}</div><div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button type="button" class="btn sm" data-act="ref-pal" data-k="${c.key}">Tirar paleta de uma imagem</button>${c.pal ? `<button type="button" class="btn sm" data-act="ref-pal-clear" data-k="${c.key}">Limpar</button>` : ''}</div>
     <div class="note" style="margin-top:6px">A paleta da primeira referência em uso vira a referência do projeto no monitor e na aba Cor.</div></div>
@@ -375,7 +391,7 @@ function refHtml(c) {
 }
 export function renderInspector() {
   const it = selItem(); const t = app.ui.itab;
-  const ref = !it && app.ui.selRef && edit() ? edit().cinema.find((c) => c.key === app.ui.selRef) : null;
+  const ref = !it && app.ui.selRef ? proj().cinema.find((c) => c.key === app.ui.selRef) : null;
   const tabs = [['efeito', 'Efeito'], ['clipe', 'Clipe'], ['exportacao', 'Exportação']];
   let body;
   if (t === 'efeito') body = it ? itemHtml(it) : ref ? refHtml(ref) : `<div class="hint-empty">Nada selecionado. Clique num efeito, textura ou som na timeline, ou escolha um em <b>Efeitos</b> à esquerda. O Auto-FX também sugere tudo pra você revisar.</div>`;
@@ -405,7 +421,7 @@ function openSoundPicker() {
   dlg.showModal();
 }
 function openBriefing() {
-  const e = edit(); const dlg = $('#dlg');
+  const e = proj(); const dlg = $('#dlg');
   dlg.innerHTML = `<div class="dlg"><h2>Briefing</h2><label for="b-name">Nome do projeto</label><input id="b-name" type="text" value="${esc((e && e.briefing.name) || app.projectName)}">
     <label for="b-notes">Anotações (objetivo, tom, referências, entregas)</label><textarea id="b-notes" rows="6" style="min-height:110px">${esc(e ? e.briefing.notes : '')}</textarea>
     <div class="row2"><button type="button" class="btn" data-act="dlg-close">Cancelar</button><button type="button" class="btn solid" data-act="briefing-save">Salvar</button></div></div>`;
@@ -505,15 +521,21 @@ export const actions = {
     item.slug = r.slug; item.why = 'Técnica do Eyecandy: ' + r.name + '. Adicionada por você no playhead.';
     addItem('Adicionar ' + r.name, item);
   },
+  'fg-add'(el) {
+    const f = app.fg.items[+el.dataset.i]; if (!f) return; const key = 'fg' + f.fgId;
+    mutProj('Referência do Film Grab: ' + f.name, (e) => { if (!e.cinema.some((c) => c.fgId === f.fgId)) e.cinema.push({ key, fgId: f.fgId, name: f.name.toUpperCase(), dir: f.dir, year: f.year, dp: f.dp, aspect: f.aspect, country: f.country, pd: f.pd, costume: f.costume, notes: '', url: f.url, pal: null, state: 'saved' }); return e; });
+    app.ui.selRef = key; app.ui.sel = null; app.ui.itab = 'efeito'; refreshLib(); renderInspector(); toast(titleCase(f.name) + ' entrou nas tuas referências. Clique em Em uso/Salvo pra ativar.');
+  },
+  'fg-more'() { if (!app.fg.loading) { loadFg(app.fg.q, false); refreshLib(); } },
   'ref-open'(el) { app.ui.selRef = el.dataset.k; app.ui.sel = null; app.ui.itab = 'efeito'; refreshLib(); renderInspector(); },
   'cin-quick'() {
     const q = app.ui.search.trim(); if (!q) return; const key = 'u' + Date.now().toString(36);
-    mutEdit('Nova referência: ' + q, (e) => { e.cinema.push({ key, name: q.toUpperCase(), dir: '', year: '', dp: '', notes: '', url: '', pal: null, state: 'saved' }); return e; });
+    mutProj('Nova referência: ' + q, (e) => { e.cinema.push({ key, name: q.toUpperCase(), dir: '', year: '', dp: '', notes: '', url: '', pal: null, state: 'saved' }); return e; });
     app.ui.selRef = key; app.ui.sel = null; app.ui.itab = 'efeito'; app.ui.search = ''; renderEfeitos(); renderInspector();
   },
-  'ref-del'(el) { const k = el.dataset.k; mutEdit('Apagar referência', (e) => { e.cinema = e.cinema.filter((c) => c.key !== k); return e; }); app.ui.selRef = null; hooks.renderAll(); },
+  'ref-del'(el) { const k = el.dataset.k; mutProj('Apagar referência', (e) => { e.cinema = e.cinema.filter((c) => c.key !== k); return e; }); app.ui.selRef = null; hooks.renderAll(); },
   'ref-pal'(el) { app.palTarget = el.dataset.k; $('#ref-file').click(); },
-  'ref-pal-clear'(el) { const k = el.dataset.k; mutEdit('Limpar paleta da referência', (e) => { e.cinema.find((c) => c.key === k).pal = null; return e; }); },
+  'ref-pal-clear'(el) { const k = el.dataset.k; mutProj('Limpar paleta da referência', (e) => { e.cinema.find((c) => c.key === k).pal = null; return e; }); },
   'pack-8mm'() {
     const dlg = $('#dlg');
     dlg.innerHTML = `<div class="dlg"><h2>Pack 8mm gratuito</h2><div class="muted" style="line-height:1.5">Scans reais de película 8 mm pra usar como overlay. O Workbench não guarda nem redistribui esses arquivos: baixe no site, coloque na tua pasta <b>Overlays</b> e adicione a pasta no Material. Eles aparecem aqui na Textura.</div>
@@ -531,22 +553,22 @@ export const actions = {
   'ov-add'() { if (!st()) { toast('Abra um vídeo primeiro.'); return; } openOverlayPicker(); },
   'ov-pick'(el) { if (!st()) { toast('Abra um vídeo primeiro.'); return; } const i = app.lib.get(el.dataset.id); if ($('#dlg').open) $('#dlg').close(); addItem('Adicionar overlay', F.newOverlay(i.id, i.name, app.ph, app.duration)); },
   'dlg-close'() { $('#dlg').close(); },
-  'cin-toggle'(el) { mutEdit('Estilo: ' + el.dataset.k, (e) => { const c = e.cinema.find((x) => x.key === el.dataset.k); c.state = c.state === 'use' ? 'saved' : 'use'; return e; }); },
+  'cin-toggle'(el) { mutProj('Estilo: ' + el.dataset.k, (e) => { const c = e.cinema.find((x) => x.key === el.dataset.k); c.state = c.state === 'use' ? 'saved' : 'use'; return e; }); },
   'cin-add'() { openCinemaAdd(); },
   'cin-save'() {
     const name = ($('#c-name').value || '').trim(); const url = ($('#c-url').value || '').trim();
     if (!name) { toast('Dê um nome pro filme.'); return; }
-    mutEdit('Nova referência: ' + name, (e) => { e.cinema.push({ key: 'u' + Date.now().toString(36), name: name.toUpperCase(), dir: url ? url.replace(/^https?:\/\//, '').slice(0, 48) : '', url, state: 'saved' }); return e; });
+    mutProj('Nova referência: ' + name, (e) => { e.cinema.push({ key: 'u' + Date.now().toString(36), name: name.toUpperCase(), dir: '', year: '', dp: '', notes: '', url, pal: null, state: 'saved' }); return e; });
     $('#dlg').close(); app.ui.etab = 'cin'; renderEfeitos();
   },
   'style-open'() { app.ui.etab = 'cin'; renderEfeitos(); $('#efeitos').scrollIntoView({ behavior: 'smooth', block: 'center' }); },
   'briefing-save'() {
     const name = $('#b-name').value.trim(); const notes = $('#b-notes').value;
-    mutEdit('Briefing', (e) => { e.briefing = { name, notes }; return e; }); if (name) app.projectName = name; $('#dlg').close(); hooks.renderAll();
+    mutProj('Briefing', (e) => { e.briefing = { name, notes }; return e; }); if (name) app.projectName = name; $('#dlg').close(); hooks.renderAll();
   },
   platform(el) {
-    const p = F.PLATFORMS.find((x) => x.key === el.dataset.v); if (!st()) { app.ratio = p.ratio; renderMonitorBar(); hooks.preview(); return; }
-    app.ratio = p.ratio; mutEdit('Plataforma: ' + p.label, (e) => { e.platform = p.key; return e; });
+    const p = F.PLATFORMS.find((x) => x.key === el.dataset.v);
+    app.ratio = p.ratio; mutProj('Plataforma: ' + p.label, (e) => { e.platform = p.key; return e; });
   },
   ratio(el) { app.ratio = el.dataset.v; hooks.renderAll(); },
   fxprev() { app.ui.fxPreview = !app.ui.fxPreview; renderMonitorBar(); hooks.preview(); },
@@ -609,7 +631,7 @@ function paramInput(ev) {
     const stt = $('#d-status'); if (stt) stt.innerHTML = 'Última ação: <b>' + esc(app.hist.label) + '</b> · passo ' + app.hist.step + ' de ' + app.hist.total;
     hooks.renderHeader(); hooks.preview(); return;
   }
-  if (act === 'ref-field') { const k = el.dataset.k; const rk = el.dataset.ref; const v = k === 'name' ? el.value.toUpperCase() : el.value; mutLight('Detalhe da referência', (e) => { e.cinema.find((c) => c.key === rk)[k] = v; return e; }, 'rf:' + rk + k); refreshLib(); return; }
+  if (act === 'ref-field') { const k = el.dataset.k; const rk = el.dataset.ref; const v = k === 'name' ? el.value.toUpperCase() : el.value; mutProj('Detalhe da referência', (e) => { e.cinema.find((c) => c.key === rk)[k] = v; return e; }, 'rf:' + rk + k, true); refreshLib(); return; }
   if (act === 'seg-text') { const k = +el.dataset.k; mutLight('Corrigir transcrição', (e) => { e.transcript.segs[k].text = el.value; return e; }, 'seg:' + k); return; }
   const id = el.dataset.id; if (!id) return;
   if (act === 'param') {
@@ -665,7 +687,11 @@ export function bind() {
   const insp = $('#inspector');
   insp.addEventListener('pointerdown', kfDown); window.addEventListener('pointermove', kfMove); window.addEventListener('pointerup', kfUp); insp.addEventListener('dblclick', kfDbl);
   document.addEventListener('input', (e) => {
-    if (e.target.id === 'fx-search') { app.ui.search = e.target.value; refreshLib(); return; }
+    if (e.target.id === 'fx-search') {
+      app.ui.search = e.target.value;
+      if (app.ui.etab === 'cin') { clearTimeout(fgTimer); fgTimer = setTimeout(() => { loadFg(app.ui.search.trim(), true); refreshLib(); }, 350); app.fg.q = app.ui.search.trim(); app.fg.loading = true; app.fg.items = []; app.fg.total = 0; }
+      refreshLib(); return;
+    }
     if (e.target.closest('#inspector,#detector')) paramInput(e);
   });
   document.addEventListener('change', (e) => { if (e.target.closest('#inspector,#detector')) paramChange(e); });

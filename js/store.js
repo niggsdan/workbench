@@ -40,6 +40,9 @@ export const app = {
 
 export const st = () => (app.hist ? app.hist.current : null);
 export const edit = () => (app.hist ? app.hist.current.edit : null);
+// Antes de abrir um vídeo, referências, plataforma e briefing ficam num rascunho que entra no projeto quando o vídeo abre.
+app.pre = newEdit();
+export const proj = () => edit() || app.pre;
 
 // ganchos que cada tela preenche
 export const hooks = { renderAll() {}, preview() {}, toast() {}, say() {}, seek() {} };
@@ -53,6 +56,11 @@ export function commit(label, patch, key = null) {
   hooks.renderAll();
 }
 export const mutEdit = (label, fn, key = null) => commit(label, (s) => { s.edit = fn(s.edit); return s; }, key);
+export function mutProj(label, fn, key = null, light = false) {
+  if (app.hist) { if (light) { const cur = clone(st()); cur.edit = fn(cur.edit) || cur.edit; app.hist.push(cur, label, key); app.dirty = true; hooks.renderHeader(); } else mutEdit(label, fn, key); return; }
+  app.pre = fn(clone(app.pre)) || app.pre;
+  if (!light) hooks.renderAll();
+}
 
 // grade compilada com cache
 const cache = new Map();

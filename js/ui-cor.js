@@ -1,5 +1,5 @@
 // Tela Cor: álbum de stills, paleta, LUTs, visualizador, scopes, nós, grupos de cena e inspetor de cor.
-import { app, $, esc, fmtT, clone, clamp, video, still, st, edit, mutEdit, hooks, toast, compsAt, compiled } from './store.js';
+import { app, $, esc, fmtT, clone, clamp, video, still, st, edit, proj, mutEdit, mutProj, hooks, toast, compsAt, compiled } from './store.js';
 import * as M from './model.js';
 import * as G from './grade.js';
 import { outSize, sampleCanvas, gradedThumb } from './render.js';
@@ -32,11 +32,11 @@ function renderAlbum() {
 }
 const sw = (cols) => '<div class="sw">' + (cols || []).map((c) => `<i style="background:${c}"></i>`).join('') + '</div>';
 function renderPal() {
-  const e = edit(); const ref = (e && M.refPalette(e)) || EX_PAL; const i = gi();
+  const e = edit(); const ref = M.refPalette(proj()) || EX_PAL; const i = gi();
   const blk = (p) => ['Claros', 'Médios', 'Escuros'].map((l, k) => `<div class="lb">${l}</div>${sw(p ? p[k] : [])}`).join('');
   $('#c-pal').innerHTML = `<div class="p-head"><h2 class="tool">Paleta</h2></div><div class="pal-c">
     <div style="font-weight:800;font-size:12px">Teu material · G${i + 1}${st() ? ' · ' + plural(groupScenes(e, i), 'cena', 'cenas') : ''}</div>${blk(app.palCor)}
-    <div style="font-weight:800;font-size:12px;margin-top:14px">Referência</div><div class="note">${e && M.refPalette(e) ? 'Da referência do projeto' : 'Exemplo, a paleta é anotada por você'}</div>${blk(ref)}
+    <div style="font-weight:800;font-size:12px;margin-top:14px">Referência</div><div class="note">${M.refPalette(proj()) ? 'Da referência do projeto' : 'Exemplo, a paleta é anotada por você'}</div>${blk(ref)}
     <div style="display:flex;flex-direction:column;gap:6px;margin-top:12px"><button type="button" class="btn" data-act="ref-load">Carregar imagem de referência</button>
     <button type="button" class="btn solid" data-act="pal-start" ${st() ? '' : 'aria-disabled="true"'}>Usar como ponto de partida</button></div></div>`;
 }
@@ -51,7 +51,7 @@ function renderLuts() {
 function renderViewer() {
   const e = edit(); const i = gi(); const s = st();
   const [a, b] = e && s ? M.groupRange(e, i, app.duration) : [0, 0];
-  const style = e ? (e.cinema.filter((c) => c.state === 'use').map((c) => titleCase(c.name)).join(' + ') || 'sem estilo') : '';
+  const style = proj() ? (proj().cinema.filter((c) => c.state === 'use').map((c) => titleCase(c.name)).join(' + ') || 'sem estilo') : '';
   const refLabel = app.ui.stillSel ? 'Still' : app.refImg ? 'Referência' : 'Original';
   $('#c-viewer').innerHTML = `<div class="v-head"><div><b>${app.ui.editing === 'general' ? 'Grade geral · todas as cenas' : `G${i + 1} · ${s ? plural(groupScenes(e, i), 'cena', 'cenas') : '—'} · ${fmtT(a).slice(0, 7)} → ${fmtT(b).slice(0, 7)}`}</b>
       <small>Referência: ${esc(style)} · grade geral ${e && e.general.on ? 'ligada' : 'desligada'}</small></div>
@@ -340,7 +340,7 @@ export function bind() {
     const c = document.createElement('canvas'); const s = Math.min(1, 640 / Math.max(img.width, img.height)); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
     app.refImg = c; const pal = G.extractPalette(c.getContext('2d').getImageData(0, 0, c.width, c.height).data);
     const tk = app.palTarget; app.palTarget = null;
-    if (edit()) mutEdit('Paleta de referência', (ed) => { const r = tk ? ed.cinema.find((x) => x.key === tk) : ed.cinema.find((x) => x.state === 'use'); if (r) r.pal = pal; else ed.refPal = pal; return ed; });
+    mutProj('Paleta de referência', (ed) => { const r = tk ? ed.cinema.find((x) => x.key === tk) : ed.cinema.find((x) => x.state === 'use'); if (r) r.pal = pal; else ed.refPal = pal; return ed; });
     app.ui.stillSel = null; if (app.ui.cv === 'atual') app.ui.cv = 'split'; render(); hooks.renderAll(); toast('Paleta anotada' + (tk ? ' na referência' : '') + '. Ela vira a referência do projeto no monitor e na aba Cor.');
   });
 }
