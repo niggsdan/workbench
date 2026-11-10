@@ -27,7 +27,7 @@ const stillImgs = new Map();
 const stillImg = (s) => { let i = stillImgs.get(s.id); if (!i) { i = new Image(); i.src = s.url; stillImgs.set(s.id, i); } return i; };
 function renderAlbum() {
   const e = edit(); const list = e ? e.stills : [];
-  $('#c-album').innerHTML = `<div class="p-head"><div class="p-title"><h2 class="tool">Álbum de stills</h2><button type="button" class="btn sm" data-act="still-grab" ${e && app.view ? '' : 'aria-disabled="true"'}>Guardar quadro</button></div></div>
+  $('#c-album').innerHTML = `<div class="p-head"><div class="p-title"><h2 class="tool">Álbum de stills</h2><span style="display:flex;gap:4px"><button type="button" class="btn sm" data-act="still-grab" ${e && app.view ? '' : 'aria-disabled="true"'}>Guardar quadro</button><button type="button" class="pclose" data-act="panel-close" data-k="left" title="Fechar painel" aria-label="Fechar painel">–</button></span></div></div>
     <div class="stills">${list.length ? list.map((s) => `<button type="button" class="still" data-act="still-pick" data-id="${s.id}" aria-pressed="${app.ui.stillSel === s.id}" title="Usar como referência no visualizador"><img src="${s.url}" alt="">${esc(s.label)}</button>`).join('') : '<div class="note" style="grid-column:1/-1">Guarde quadros pra comparar cenas. Clique num still pra usar como referência no visualizador.</div>'}</div>
     ${list.length ? `<div class="p-foot" style="display:flex;justify-content:space-between;align-items:center">Clique pra comparar. <button type="button" class="link-btn" data-act="still-del" ${app.ui.stillSel ? '' : 'disabled'}>Apagar selecionado</button></div>` : ''}`;
 }
@@ -64,7 +64,7 @@ function renderViewer() {
       <span>Prévia em meia resolução, o render final é em cheia</span></div>`;
 }
 function renderScopes() {
-  $('#c-scopes').innerHTML = `<section class="card scope"><h3>Waveform</h3><canvas id="sc-wave" width="240" height="110"></canvas></section>
+  $('#c-scopes').innerHTML = `<section class="card scope"><div class="p-title"><h3>Waveform</h3><button type="button" class="pclose" data-act="panel-close" data-k="scopes" title="Fechar painel" aria-label="Fechar painel">–</button></div><canvas id="sc-wave" width="240" height="110"></canvas></section>
     <section class="card scope"><h3>Vectorscope</h3><canvas id="sc-vec" width="240" height="130"></canvas></section>
     <section class="card scope"><h3>Histograma</h3><canvas id="sc-hist" width="240" height="120"></canvas></section>`;
 }
@@ -93,7 +93,7 @@ function renderNodes() {
   if (!g) { $('#c-nodes').innerHTML = '<div class="n-head"><h2 class="tool">Nós</h2></div><div class="muted">Abra um vídeo pra montar a grade.</div>'; return; }
   const L = graphLayout(g); const sel = app.ui.node || (curNode() && curNode().id);
   const path = ([a, b]) => { const x1 = a.x + a.w; const y1 = a.y + 15; const x2 = b.x; const y2 = b.y + 15; const mx = (x1 + x2) / 2; return `<path d="M${x1} ${y1} H${mx} V${y2} H${x2}" fill="none" stroke="#6a7078" stroke-width="2"/>`; };
-  $('#c-nodes').innerHTML = `<div class="n-head"><h2 class="tool">Nós</h2><span class="sub">${app.ui.editing === 'general' ? 'Grade geral (por cima de todas as cenas)' : `G${i + 1} · grade da cena + grade geral`}</span><div class="grow"></div>
+  $('#c-nodes').innerHTML = `<div class="n-head"><h2 class="tool">Nós</h2><button type="button" class="pclose" data-act="panel-close" data-k="bottom" title="Fechar painel" aria-label="Fechar painel">–</button><span class="sub">${app.ui.editing === 'general' ? 'Grade geral (por cima de todas as cenas)' : `G${i + 1} · grade da cena + grade geral`}</span><div class="grow"></div>
       <div class="seg sm"><button type="button" data-act="editing" data-v="shot" aria-pressed="${app.ui.editing !== 'general'}">Editando G${i + 1}</button><button type="button" data-act="editing" data-v="general" aria-pressed="${app.ui.editing === 'general'}">Grade geral</button></div>
       <button type="button" class="btn sm" data-act="node-add" data-v="serial">+ Nó em série</button><button type="button" class="btn sm" data-act="node-add" data-v="par">+ Paralelo</button><button type="button" class="btn sm" data-act="node-add" data-v="post">+ Camada</button><button type="button" class="btn sm" data-act="pal-sim">+ Paleta do filme</button>
       <button type="button" class="btn sm" data-act="general-toggle" aria-pressed="${e.general.on}">${e.general.on ? 'Grade geral ligada' : 'Grade geral desligada'}</button></div>

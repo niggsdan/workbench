@@ -12,6 +12,7 @@ import * as Mat from './ui-material.js';
 import * as Ed from './ui-editar.js';
 import * as Cor from './ui-cor.js';
 import * as Ent from './ui-entrega.js';
+import * as Lay from './layout.js';
 
 const say = (t) => { const a = $('#analysis'); if (a) { a.textContent = t; a.title = t; } };
 hooks.say = say;
@@ -35,7 +36,7 @@ function go(tab) {
   app.tab = tab;
   for (const v of ['editar', 'cor', 'entrega']) $('#view-' + v).hidden = v !== tab;
   if (tab === 'entrega') app.ratio = app.dest[app.focusDest].ratio;
-  renderAll(); app.dirty = true; window.scrollTo({ top: 0 });
+  Lay.renderPanelMenu(); renderAll(); app.dirty = true; window.scrollTo({ top: 0 });
 }
 hooks.go = go;
 
@@ -281,7 +282,7 @@ const appActions = {
   'pack-ae'() { $('#dlg').close(); Ent.actions['pack-xml'](); toast('XML salvo. Abra no Premiere e mande pro After Effects (Dynamic Link).', 7000); },
   'pack-capcut'() { $('#dlg').close(); go('entrega'); toast('Escolha os destinos e clique em Exportar. Depois é só importar o MP4 no CapCut.', 7000); }
 };
-const actions = { ...Mat.actions, ...Ed.actions, ...Cor.actions, ...Ent.actions, ...appActions };
+const actions = { ...Mat.actions, ...Ed.actions, ...Cor.actions, ...Ent.actions, ...Lay.actions, ...appActions };
 
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
@@ -294,7 +295,7 @@ document.addEventListener('click', (e) => {
   if (e.target.id === 'cv-mon') togglePlay();
 });
 $('#proj').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) openProjectFile(f); });
-Mat.bindInputs(); Ed.bind(); Cor.bind(); Ent.bind();
+Mat.bindInputs(); Ed.bind(); Cor.bind(); Ent.bind(); Lay.bindLayout();
 
 video.addEventListener('seeked', () => { app.dirty = true; });
 video.addEventListener('loadeddata', () => { app.dirty = true; });

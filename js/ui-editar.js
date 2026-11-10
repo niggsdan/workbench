@@ -94,7 +94,7 @@ function libRows() {
 const NOTES = { tec: 'Vocabulário Eyecandy (' + EYECANDY.length + ' técnicas): só o nome e o link. Ajuste é produzido aqui; Linguagem vira marcador.', cin: 'Busca nos três sites pelo nome. Nenhuma imagem deles fica aqui; os detalhes e a paleta são anotados por você.', tex: 'Gerado no Workbench. Overlays em arquivo vêm da tua pasta Overlays.' };
 export function renderEfeitos() {
   const t = app.ui.etab;
-  $('#efeitos').innerHTML = `<div class="p-head"><h2 class="tool" style="margin-bottom:10px">Efeitos</h2>
+  $('#efeitos').innerHTML = `<div class="p-head"><div class="p-title" style="margin-bottom:10px"><h2 class="tool">Efeitos</h2><button type="button" class="pclose" data-act="panel-close" data-k="fx" title="Fechar painel" aria-label="Fechar painel">–</button></div>
     <div class="seg" style="display:flex">${[['tec', 'Técnicas'], ['cin', 'Cinema'], ['tex', 'Textura']].map(([k, l]) => `<button type="button" style="flex:1" aria-pressed="${t === k}" data-act="etab" data-v="${k}">${l}</button>`).join('')}</div>
     <input class="search" id="fx-search" type="text" aria-label="Buscar" placeholder="${t === 'cin' ? 'Buscar filme ou diretor' : t === 'tec' ? 'Buscar técnica' : 'Buscar textura'}" value="${esc(app.ui.search)}" autocomplete="off">
     ${t === 'tec' ? `<div class="cats">${ECATS.map(([k, l]) => `<button type="button" data-act="ecat" data-v="${k}" aria-pressed="${(app.ui.ecat || 'all') === k}">${l}</button>`).join('')}</div>` : ''}</div>
@@ -111,7 +111,7 @@ export function renderMonitorBar() {
   const first = use[0];
   $('#style-pill').textContent = 'Estilo: ' + (first ? titleCase(first.name) + (use.length > 1 ? ' +' + (use.length - 1) : '') : 'nenhum');
   const fp = $('#fxprev'); fp.setAttribute('aria-pressed', String(app.ui.fxPreview));
-  $('#mtools').innerHTML = `<button type="button" data-act="mtool" data-v="seta" aria-pressed="${app.ui.mtool === 'seta'}" title="Seta: selecione e mova máscaras direto no vídeo">➚ Seta</button>` + K.MASK_TYPES.map((m) => `<button type="button" data-act="mask-add" data-k="${m.key}" title="${m.hint}">+ ${m.name}</button>`).join('');
+  $('#mtools').innerHTML = `<button type="button" data-act="mtool" data-v="seta" aria-pressed="${app.ui.mtool === 'seta'}" title="Seta: selecione e mova máscaras direto no vídeo">➚ Seta</button>` + K.MASK_TYPES.map((m) => `<button type="button" data-act="mask-add" data-k="${m.key}" title="Nova ${m.name.toLowerCase()}: ${m.hint}">${m.name}</button>`).join('');
   $('#play').innerHTML = video.paused ? '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z" fill="currentColor"/></svg>' : '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M7 5h4v14H7z M13 5h4v14h-4z" fill="currentColor"/></svg>';
 }
 
@@ -119,7 +119,7 @@ const sw = (cols) => '<div class="sw">' + cols.map((c) => `<i style="background:
 export function renderPalette() {
   const cur = app.palCur; const e0 = proj(); const ref = (e0 && M.refPalette(e0)) || EX_PAL; const refName = e0 && (e0.cinema.find((c) => c.state === 'use' && c.pal) || {}).name;
   const blk = (p) => ['Claros', 'Médios', 'Escuros'].map((l, i) => `<div class="lb">${l}</div>${sw(p ? p[i] : [])}`).join('');
-  $('#pal').innerHTML = `<div><div class="t">Teu material · cena atual</div>${blk(cur)}</div>
+  $('#pal').innerHTML = `<div class="p-title"><div class="t">Teu material · cena atual</div><button type="button" class="pclose" data-act="panel-close" data-k="pal" title="Fechar painel" aria-label="Fechar painel">–</button></div><div>${blk(cur)}</div>
     <div><div class="t">Referência</div><div class="s">${refName ? 'Paleta de ' + esc(titleCase(refName)) : e0 && e0.refPal ? 'Paleta anotada por você' : 'Exemplo, a paleta é anotada por você'}</div>${blk(ref)}</div>
     <button type="button" class="btn" style="margin-top:auto" data-act="go-cor">Abrir na aba Cor</button>`;
 }
@@ -213,7 +213,7 @@ export function renderTimeline() {
   const el = $('#tl-card'); const s = st(); const e = edit();
   const plat = e ? F.PLATFORMS.find((p) => p.key === e.platform) : F.PLATFORMS[1];
   el.innerHTML = `<div class="tl-head"><div class="l"><h2 class="tool">Timeline</h2><span class="muted" style="font-weight:600">${plat.label.split(' · ')[0]} · ${s ? fmtClock(F.outDuration(e.fx, app.duration)).padStart(5, '0') : '00:00'}</span></div>
-    <div class="legend"><span class="k"><i style="background:#e6e7e9"></i>Vídeo</span><span class="k"><i style="background:#6b7077"></i>Cenas</span><span class="k"><i style="background:var(--wine)"></i>FX</span><span class="k"><i style="border:1.5px solid var(--wine-line)"></i>Textura</span>
+    <div class="legend"><button type="button" class="pclose" data-act="panel-close" data-k="tl" title="Fechar painel" aria-label="Fechar painel">–</button><span class="k"><i style="background:#e6e7e9"></i>Vídeo</span><span class="k"><i style="background:#6b7077"></i>Cenas</span><span class="k"><i style="background:var(--wine)"></i>FX</span><span class="k"><i style="border:1.5px solid var(--wine-line)"></i>Textura</span>
 </div></div>
     <div class="tl-body" id="timeline"></div>`;
   const body = $('#timeline');
@@ -401,7 +401,7 @@ export function renderInspector() {
   let body;
   if (t === 'efeito') body = it ? itemHtml(it) : ref ? refHtml(ref) : `<div class="hint-empty">Nada selecionado. Clique num efeito, textura ou som na timeline, ou escolha um em <b>Efeitos</b> à esquerda. O Auto-FX também sugere tudo pra você revisar.</div>`;
   else if (t === 'clipe') body = clipeHtml(); else body = exportTabHtml();
-  $('#inspector').innerHTML = `<div class="insp-tabs">${tabs.map(([k, l]) => `<button type="button" data-act="itab" data-v="${k}" aria-pressed="${t === k}">${l}</button>`).join('')}</div>${body}`;
+  $('#inspector').innerHTML = `<div class="insp-tabs">${tabs.map(([k, l]) => `<button type="button" data-act="itab" data-v="${k}" aria-pressed="${t === k}">${l}</button>`).join('')}<span class="grow"></span><button type="button" class="pclose" data-act="panel-close" data-k="insp" title="Fechar painel" aria-label="Fechar painel">–</button></div>${body}`;
 }
 
 // ---------- ações ----------

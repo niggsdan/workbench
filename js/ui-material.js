@@ -48,7 +48,7 @@ export function renderMaterial() {
       + ROLES.filter((r) => g[r].length).map((r) => `<div class="tree-row folder" style="padding-left:20px"><span class="sq" style="background:${ROLE_DOT[r]}"></span><span class="nm">${r}</span><span class="meta">${g[r].length}</span></div>${g[r].map(row).join('')}`).join('')
     : '<div class="note" style="padding:14px 6px;line-height:1.5">Nada aqui ainda. Use os botões acima ou arraste arquivos e pastas pra tela. Pastas chamadas Falas, Cenas e Overlays são separadas sozinhas.</div>';
   el.innerHTML = `
-    <div class="p-head"><div class="p-title"><h2 class="tool">Material</h2><span class="pill-tag">${lib.items.length ? (app.source === 'pasta' ? 'Pasta ligada' : 'Upload') : 'Vazio'}</span></div>
+    <div class="p-head"><div class="p-title"><h2 class="tool">Material</h2><span class="pill-tag">${lib.items.length ? (app.source === 'pasta' ? 'Pasta ligada' : 'Upload') : 'Vazio'}</span><button type="button" class="pclose" data-act="panel-close" data-k="mat" title="Fechar painel" aria-label="Fechar painel">–</button></div>
       <div class="p-btns"><button type="button" class="btn" data-act="add-files">Upload</button><button type="button" class="btn" data-act="add-folder">Pasta</button></div></div>
     <div class="p-list">${tree}</div>
     <div class="p-foot">Qualquer tipo de arquivo entra. Arquivo novo na pasta entra quando você adiciona de novo.</div>`;

@@ -22,6 +22,7 @@
       <button type="button" class="tab" data-act="tab" data-v="cor">Cor</button>
       <button type="button" class="tab" data-act="tab" data-v="entrega">Entrega</button>
     </nav>
+    <div class="panels" id="panels" role="group" aria-label="Painéis abertos"></div>
     <div class="grow"></div>
     <div class="group" role="group" aria-label="Histórico de ações">
       <button type="button" class="btn" data-act="undo" id="undo-top"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 0 12h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Desfazer</button>
@@ -42,6 +43,7 @@
     <section class="view v-editar" id="view-editar">
       <div class="col-left">
         <nav class="rail" id="rail" aria-label="Ferramentas"></nav>
+        <div class="split split-x" data-split="left" title="Arraste pra mudar a largura"></div>
         <div class="stack">
           <aside class="card panel" id="material" aria-label="Material"></aside>
           <aside class="card panel" id="efeitos" aria-label="Efeitos"></aside>
@@ -53,7 +55,6 @@
           <div class="mon-top">
             <div class="seg" id="plats" role="group" aria-label="Plataforma"></div>
             <div class="mon-top-r">
-              <div class="seg sm" id="mtools" role="group" aria-label="Ferramentas no vídeo"></div>
               <button type="button" class="btn sm style-pill" id="style-pill" data-act="style-open"></button>
               <div class="seg sm" id="ratios" role="group" aria-label="Formato da prévia"></div>
             </div>
@@ -81,7 +82,7 @@
             <aside class="pal" id="pal" aria-label="Paleta"></aside>
           </div>
           <div class="transport">
-            <span class="mono" id="timecode">00:00,0 <span class="muted">/ 00:00,0</span></span>
+            <div class="tleft"><span class="mono" id="timecode">00:00,0 <span class="muted">/ 00:00,0</span></span><div class="seg sm" id="mtools" role="group" aria-label="Ferramentas no vídeo"></div></div>
             <div class="tbtns">
               <button type="button" class="btn sq" data-act="step-back" aria-label="Voltar 0,1 s"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M7 6v12 M19 6l-9 6 9 6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
               <button type="button" class="btn sq solid wide" data-act="play" id="play" aria-label="Tocar"></button>
@@ -92,9 +93,10 @@
         </section>
       </div>
 
-      <aside class="col-right"><div class="card inspector" id="inspector" aria-label="Inspetor"></div></aside>
+      <aside class="col-right"><div class="split split-x l" data-split="right" title="Arraste pra mudar a largura"></div><div class="card inspector" id="inspector" aria-label="Inspetor"></div></aside>
 
       <div class="bottom">
+        <div class="split split-y" data-split="bottom" title="Arraste pra mudar a altura da timeline"></div>
         <section class="card tl-wrap" aria-label="Timeline">
           <div class="detector" id="detector" aria-label="Detector de cenas"></div>
           <div class="autofx" id="autofx" aria-label="Sugestões automáticas"></div>
@@ -106,6 +108,7 @@
     <!-- ===================== COR ===================== -->
     <section class="view v-cor" id="view-cor" hidden>
       <div class="col-left cor-left">
+        <div class="split split-x" data-split="left" title="Arraste pra mudar a largura"></div>
         <aside class="card panel" id="c-album" aria-label="Álbum de stills"></aside>
         <aside class="card panel" id="c-pal" aria-label="Paleta"></aside>
         <aside class="card panel" id="c-luts" aria-label="LUTs"></aside>
@@ -116,8 +119,9 @@
           <div class="scopes" id="c-scopes"></div>
         </div>
       </div>
-      <aside class="col-right"><div class="card inspector" id="c-insp" aria-label="Inspetor de cor"></div></aside>
+      <aside class="col-right"><div class="split split-x l" data-split="right" title="Arraste pra mudar a largura"></div><div class="card inspector" id="c-insp" aria-label="Inspetor de cor"></div></aside>
       <div class="bottom cor-bottom">
+        <div class="split split-y" data-split="bottom" title="Arraste pra mudar a altura"></div>
         <section class="card nodes" id="c-nodes" aria-label="Nós"></section>
         <section class="card shots" id="c-shots" aria-label="Grades por grupo de cenas"></section>
       </div>
