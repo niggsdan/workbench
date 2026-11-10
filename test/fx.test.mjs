@@ -30,7 +30,7 @@ test('Auto-FX: sugere por cortes, textura pelo estilo, tudo como sugerido', () =
   assert.ok(it.some((x) => x.kind === 'tec') && it.some((x) => x.kind === 'tx'));
   assert.ok(it.every((x) => x.a >= 0 && x.b <= 33 && x.b > x.a));
   const c = F.countSuggested(it); assert.ok(c.fx >= 1 && c.tx >= 1);
-  assert.ok(it.filter((x) => x.kind === 'tec').every((x) => /Corte de cena entre C\d+ e C\d+/.test(x.why)));
+  assert.ok(it.filter((x) => x.kind === 'tec').every((x) => /Corte de cena de C\d+ para C\d+/.test(x.why)));
   const y = F.suggest({ scenes, cands, duration: 33, platformKey: 'youtube' });
   assert.ok(y.filter((x) => x.kind === 'tec').length < it.filter((x) => x.kind === 'tec').length);
 });

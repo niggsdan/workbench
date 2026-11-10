@@ -70,6 +70,7 @@ function renderOpts() {
       <button type="button" class="btn" data-act="pack-xml" ${st() ? '' : 'aria-disabled="true"'}>XML (Premiere, DaVinci Resolve)</button>
       <button type="button" class="btn" data-act="pack-edl" ${st() ? '' : 'aria-disabled="true"'}>EDL CMX 3600 (Premiere, Resolve, Avid)</button>
       <button type="button" class="btn" data-act="pack-credits" ${st() ? '' : 'aria-disabled="true"'}>Créditos (.txt)</button>
+      <button type="button" class="btn" data-act="tr-srt" ${e && e.transcript ? '' : 'aria-disabled="true"'} title="${e && e.transcript ? '' : 'Transcreva o vídeo primeiro'}">Legendas (.srt)</button>
       <button type="button" class="btn" data-act="save" ${st() ? '' : 'aria-disabled="true"'}>Projeto Workbench (.json)</button></div>
       <div class="note" style="margin-top:6px;line-height:1.5">After Effects: importe o XML no Premiere e mande pro AE (Dynamic Link). CapCut não abre projeto de fora: use o MP4 exportado.</div></div>`;
 }

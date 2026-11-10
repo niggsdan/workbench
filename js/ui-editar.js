@@ -8,6 +8,8 @@ import { outSize } from './render.js';
 import { extractPalette } from './grade.js';
 import { sampleCanvas } from './render.js';
 import { SOUNDS } from './fx.js';
+import * as T from './transcript.js';
+import { transcribe } from './transcribe.js';
 
 const SMALL = ['de', 'da', 'do', 'das', 'dos', 'à', 'e', 'a', 'o'];
 const nice = (s) => String(s).toLowerCase().split(' ').map((w, i) => (i && SMALL.includes(w) ? w : i ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ');
@@ -151,15 +153,17 @@ export function renderAutofx() {
   if (!e || !st()) { el.innerHTML = `<div class="ic">${ic}</div><div class="tx"><b>Auto-FX</b><span>Abra um vídeo e o Auto-FX sugere efeitos, texturas e sons a partir dos cortes de cena e do estilo do projeto.</span></div>`; return; }
   const hasAuto = e.fx.some((f) => f.auto);
   const style = e.cinema.filter((x) => x.state === 'use').map((x) => titleCase(x.name))[0] || 'estilo livre';
-  el.innerHTML = `<div class="ic">${ic}</div><div class="tx"><b>${hasAuto ? 'Auto-FX leu os cortes de cena e o estilo do projeto' : 'Auto-FX ainda não sugeriu nada'}</b>
-    <span>${pend ? `${c.fx} efeitos, ${c.tx} texturas e ${c.sfx} sons sugeridos. Tudo pode ser movido, trocado ou apagado.` : hasAuto ? 'Tudo aceito. Você ainda pode mover, trocar ou apagar na timeline.' : `Sugere efeitos nos cortes mais fortes, texturas pelo estilo (${esc(style)}) e sons. A transcrição entra numa próxima etapa.`}</span></div>
+  const tr = e.transcript && e.transcript.segs.length;
+  el.innerHTML = `<div class="ic">${ic}</div><div class="tx"><b>${hasAuto ? 'Auto-FX leu ' + (tr ? 'a transcrição, ' : '') + 'os cortes de cena e o estilo do projeto' : 'Auto-FX ainda não sugeriu nada'}</b>
+    <span>${pend ? `${c.fx} efeitos, ${c.tx} texturas e ${c.sfx} sons sugeridos. Tudo pode ser movido, trocado ou apagado.` : hasAuto ? 'Tudo aceito. Você ainda pode mover, trocar ou apagar na timeline.' : `Sugere efeitos nos cortes mais fortes, texturas pelo estilo (${esc(style)}) e sons${tr ? ', e jump cut nas pausas da fala' : '. Com a transcrição, ele também usa a fala'}.`}</span></div>
+    ${!tr && !app.tr.busy ? '<button type="button" class="btn" data-act="tool" data-name="Transcrição">Transcrever</button>' : ''}
     ${pend ? '<button type="button" class="btn" data-act="autofx-review">Revisar um a um</button><button type="button" class="btn solid" data-act="autofx-accept">Aceitar tudo</button>'
       : `<button type="button" class="btn solid" data-act="autofx-run">${hasAuto ? 'Sugerir de novo' : 'Sugerir agora'}</button>`}`;
 }
 function autofxRun() {
   const s = st(); if (!s) return;
   const e = s.edit; const style = (e.cinema.find((c) => c.state === 'use') || { key: 'cdd' }).key;
-  const sug = F.suggest({ scenes: s.scenes, cands: app.cands, duration: app.duration, platformKey: e.platform, styleKey: style });
+  const sug = F.suggest({ scenes: s.scenes, cands: app.cands, duration: app.duration, platformKey: e.platform, styleKey: style, segs: e.transcript ? e.transcript.segs : [] });
   mutEdit('Auto-FX: ' + sug.length + ' sugestões', (ed) => { ed.fx = ed.fx.filter((f) => !(f.auto && !f.accepted)).concat(sug); return ed; });
   app.ui.sel = sug[0] ? sug[0].id : null; app.ui.itab = 'efeito'; hooks.renderAll();
   toast(sug.length + ' sugestões na timeline. Clique em cada uma pra ver o motivo.');
@@ -208,7 +212,7 @@ export function renderTimeline() {
     ${g('Cor · grade por cena', groups, '', 'grp')}
     ${g('V2 · Cenas', scenes, '', 'scn')}
     ${g('V1 · Vídeo', `<div class="clip v1" style="left:0;width:100%;cursor:default">${esc(app.name)}</div>`, '', 'v1')}
-    ${g('A1 · Transcrição', '<span class="lane-hint">A transcrição entra numa próxima etapa</span>', '', 'a1')}
+    ${g('A1 · Transcrição', e.transcript && e.transcript.segs.length ? e.transcript.segs.map((sg, k) => `<div class="clip a${app.ui.seg === k ? ' sel' : ''}" data-seg="${k}" style="${span(sg.a, Math.max(sg.b, sg.a + 0.3))};cursor:pointer" title="${esc(sg.text)}">${esc(sg.text)}</div>`).join('') : `<span class="lane-hint">${app.tr.busy ? esc(app.tr.stage) : 'Sem transcrição. Use a ferramenta Transcrição no menu da esquerda.'}</span>`, '', 'a1')}
     ${g('A2 · Áudio', `<div class="clip a" style="left:0;width:100%;cursor:default">${esc(it && it.kind === 'video' ? 'áudio de ' + it.name : 'áudio')}</div>`, '', 'a2')}
     <div class="playhead" aria-hidden="true"><i id="ph-line"></i><u id="ph-knob"></u></div></div>`;
   syncPlayhead();
@@ -268,7 +272,8 @@ export function mutLight(label, fn, key) {
 function laneClick(ev) {
   const lane = ev.target.closest('[data-lane]'); if (!lane || !app.duration) return;
   const t = laneTime(lane, ev.clientX); const kind = lane.dataset.lane;
-  const grp = ev.target.closest('[data-grp]'); const scn = ev.target.closest('[data-scn]'); const idea = ev.target.closest('[data-idea]');
+  const grp = ev.target.closest('[data-grp]'); const scn = ev.target.closest('[data-scn]'); const idea = ev.target.closest('[data-idea]'); const sg = ev.target.closest('[data-seg]');
+  if (sg) { const k = +sg.dataset.seg; app.ui.seg = k; app.ui.sel = null; app.ui.selIdea = null; app.ui.itab = 'clipe'; hooks.seek(edit().transcript.segs[k].a + 0.01); hooks.renderAll(); return; }
   if (ev.target.closest('[data-clip],[data-sfx]')) return;
   if (grp) { app.ui.node = null; hooks.selectGroup(+grp.dataset.grp); return; }
   if (idea) { app.ui.selIdea = idea.dataset.idea; app.ui.sel = null; app.ui.itab = 'clipe'; hooks.seek(clamp(+edit().ideas.find((i) => i.id === idea.dataset.idea).a + 0.05, 0, app.duration)); hooks.renderAll(); return; }
@@ -278,7 +283,7 @@ function laneClick(ev) {
     return;
   }
   hooks.seek(t);
-  if (scn) app.ui.itab = 'clipe';
+  if (scn) { app.ui.itab = 'clipe'; app.ui.seg = null; }
 }
 
 // ---------- inspetor ----------
@@ -319,6 +324,12 @@ function clipeHtml() {
   const e = edit(); const i = curScene(); const sc = s.scenes[i]; const gi = curGroup();
   const over = e.fx.filter((f) => f.a < sc.b && f.b > sc.a);
   const idea = e.ideas.find((x) => x.id === app.ui.selIdea);
+  const sg = e.transcript && app.ui.seg != null ? e.transcript.segs[app.ui.seg] : null;
+  if (sg) return `<div class="chips"><span class="kchip o">Fala · A1</span></div><h3 class="big">Trecho ${app.ui.seg + 1}</h3>
+    <div class="mono muted">${fmtT(sg.a)} → ${fmtT(sg.b)}</div>
+    <div class="field">Texto<textarea data-act="seg-text" data-k="${app.ui.seg}" rows="4">${esc(sg.text)}</textarea></div>
+    <div class="note">Corrija aqui o que o Whisper errou. A legenda, as ideias e o Auto-FX usam esse texto.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn sm" data-act="seg-cap">Virar legenda</button><button type="button" class="btn sm" data-act="seg-del">Apagar trecho</button><button type="button" class="btn sm" data-act="seg-close">Ver o clipe</button></div>`;
   return `<div class="chips"><span class="kchip o">Clipe</span></div><h3 class="big" style="font-size:26px;text-transform:none;letter-spacing:0;color:var(--txt)">${N(i)}</h3>
     <div class="mono muted">${fmtT(sc.a)} → ${fmtT(sc.b)} · ${dsec(sc.a, sc.b)}</div>
     <div class="box"><div class="r"><span>Grupo de cor</span><b>G${gi + 1}</b></div><div class="r" style="margin-top:6px"><span>Efeitos nesta cena</span><b>${over.length}</b></div></div>
@@ -379,15 +390,74 @@ function openCinemaAdd() {
   dlg.showModal();
 }
 
+// ---------- transcrição ----------
+app.tr = { busy: false, stage: '', p: 0, text: '', device: '', ctl: null, model: localStorage.getItem('wb.trModel') || 'base', lang: localStorage.getItem('wb.trLang') || 'portuguese' };
+function trHtml() {
+  const e = edit(); const tr = e && e.transcript; const t = app.tr;
+  const words = tr ? tr.segs.reduce((n, sg) => n + sg.text.split(' ').length, 0) : 0;
+  return `<div class="dlg" data-dlg="tr"><h2>Transcrição</h2>
+    <div class="muted" style="line-height:1.5">Roda no teu navegador com o Whisper. A fala não sai do computador. O modelo é baixado uma vez e fica guardado aqui.</div>
+    ${tr ? `<div class="box"><div class="r"><b>${tr.segs.length} trechos · ${words} palavras</b><small>${esc((T.LANGS.find((l) => l[0] === tr.lang) || [, ''])[1])}</small></div><div class="note" style="margin-top:4px">Clique num trecho na faixa A1 pra corrigir o texto.</div></div>` : ''}
+    <label>Modelo</label><div class="seg">${T.MODELS.map((m) => `<button type="button" data-act="tr-model" data-v="${m.key}" aria-pressed="${t.model === m.key}">${m.label} · ${m.size}</button>`).join('')}</div>
+    <label>Idioma da fala</label><div class="seg">${T.LANGS.map(([k, l]) => `<button type="button" data-act="tr-lang" data-v="${k}" aria-pressed="${t.lang === k}">${l}</button>`).join('')}</div>
+    ${t.busy ? `<div class="box"><div class="r"><b id="tr-stage">${esc(t.stage)}</b><small>${t.device === 'webgpu' ? 'placa de vídeo' : t.device ? 'processador' : ''}</small></div><div class="bar" style="margin-top:8px"><i id="tr-bar" style="width:${Math.round(t.p * 100)}%"></i></div><div class="note" id="tr-text" style="margin-top:6px">${esc(t.text)}</div></div>` : ''}
+    <div class="row2"><button type="button" class="btn" data-act="dlg-close">Fechar</button>
+      ${t.busy ? '<button type="button" class="btn" data-act="tr-cancel">Cancelar</button>' : `<button type="button" class="btn ${tr ? '' : 'solid'}" data-act="tr-run" ${st() ? '' : 'aria-disabled="true"'}>${tr ? 'Transcrever de novo' : 'Transcrever'}</button>`}
+      ${tr && !t.busy ? '<button type="button" class="btn" data-act="tr-srt">Baixar .srt</button><button type="button" class="btn" data-act="tr-captions">Gerar legendas</button><button type="button" class="btn solid" data-act="tr-ideas">Separar ideias</button>' : ''}</div></div>`;
+}
+function openTranscript() { const d = $('#dlg'); d.innerHTML = trHtml(); if (!d.open) d.showModal(); }
+const trOpen = () => { const d = $('#dlg'); return d.open && d.querySelector('[data-dlg="tr"]'); };
+function trProgress() {
+  if (!trOpen()) return; const st2 = $('#tr-stage'); if (!st2) { openTranscript(); return; }
+  st2.textContent = app.tr.stage; $('#tr-bar').style.width = Math.round(app.tr.p * 100) + '%'; $('#tr-text').textContent = app.tr.text;
+}
+async function runTranscription() {
+  const it = app.lib.get(app.activeId); if (!st() || !it || !it.play) { toast('Abra um vídeo primeiro.'); return; }
+  const ctl = new AbortController(); Object.assign(app.tr, { busy: true, stage: 'Preparando…', p: 0, text: '', device: '', ctl });
+  openTranscript(); renderAutofx(); renderTimeline();
+  try {
+    const segs = await transcribe(it.play, it.name, { model: app.tr.model, lang: app.tr.lang, duration: app.duration, signal: ctl.signal,
+      onProgress: (x) => { app.tr.stage = x.stage; app.tr.p = x.p; if (x.text) app.tr.text = x.text; if (x.device) app.tr.device = x.device; say(x.stage); trProgress(); } });
+    if (!segs.length) throw new Error('não encontrei fala nesse vídeo');
+    const first = !edit().ideas.length;
+    mutEdit('Transcrição: ' + segs.length + ' trechos', (e) => { e.transcript = { lang: app.tr.lang, model: app.tr.model, segs }; if (first) e.ideas = T.ideasFromTranscript(segs, st().scenes, app.duration, e.platform).map((i) => ({ id: F.newId(), ...i })); return e; });
+    say('Transcrição pronta: ' + segs.length + ' trechos.');
+    toast('Transcrição pronta.' + (first ? ' Já separei as ideias na timeline.' : '') + ' Agora o Auto-FX usa a fala.', 7000);
+  } catch (err) {
+    if (err.name !== 'AbortError') { toast('A transcrição falhou: ' + err.message, 9000); say('A transcrição falhou: ' + err.message); }
+  } finally { app.tr.busy = false; app.tr.ctl = null; if (trOpen()) openTranscript(); hooks.renderAll(); }
+}
+function makeCaptions() {
+  const segs = edit().transcript.segs; const lines = T.captionsFromTranscript(segs);
+  mutEdit('Legendas da transcrição: ' + lines.length, (e) => { e.fx = e.fx.filter((f) => !f.cap).concat(lines.map((l) => { const it = F.newText('legenda', l.a, app.duration); it.b = l.b; it.params.text = l.text; it.cap = true; it.why = 'Gerada da transcrição.'; return it; })); return e; });
+  toast(lines.length + ' legendas na faixa Texto. Pra mudar uma, clique nela.');
+}
+function download(blob, name) { const a = $('#dl'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+export function downloadSrt() {
+  const e = edit(); if (!e || !e.transcript) return;
+  download(new Blob([T.toSrt(T.captionsFromTranscript(e.transcript.segs))], { type: 'text/plain' }), (app.projectName || app.name.replace(/\.[^.]+$/, '') || 'legendas').replace(/[^\w.-]+/g, '_') + '.srt');
+}
+
 export const actions = {
+  'tr-model'(el) { app.tr.model = el.dataset.v; localStorage.setItem('wb.trModel', app.tr.model); openTranscript(); },
+  'tr-lang'(el) { app.tr.lang = el.dataset.v; localStorage.setItem('wb.trLang', app.tr.lang); openTranscript(); },
+  'tr-run'() { runTranscription(); },
+  'tr-cancel'() { if (app.tr.ctl) app.tr.ctl.abort(); },
+  'tr-ideas'() { const e = edit(); const ideas = T.ideasFromTranscript(e.transcript.segs, st().scenes, app.duration, e.platform); mutEdit('Separar ideias: ' + ideas.length, (ed) => { ed.ideas = ideas.map((i) => ({ id: F.newId(), ...i })); return ed; }); $('#dlg').close(); toast(ideas.length + ' ideias na faixa Ideias. No TikTok, cada uma vira um corte na Entrega.'); },
+  'tr-captions'() { $('#dlg').close(); makeCaptions(); },
+  'tr-srt'() { downloadSrt(); },
+  'seg-cap'() { const sg = edit().transcript.segs[app.ui.seg]; const it = F.newText('legenda', sg.a, app.duration); it.b = sg.b; it.params.text = sg.text; it.cap = true; addItem('Legenda do trecho', it); },
+  'seg-del'() { const k = app.ui.seg; mutEdit('Apagar trecho da transcrição', (e) => { e.transcript.segs.splice(k, 1); return e; }); app.ui.seg = null; hooks.renderAll(); },
+  'seg-close'() { app.ui.seg = null; renderInspector(); },
   tool(el) {
     const n = el.dataset.name; app.ui.tool = n; renderRail();
     const go = (sel) => { const t = $(sel); if (t && t.scrollIntoView) t.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
     if (n === 'Briefing') openBriefing();
-    else if (n === 'Transcrição') { const dlg = $('#dlg'); dlg.innerHTML = '<div class="dlg"><h2>Transcrição</h2><div class="muted" style="line-height:1.5">A transcrição roda dentro do navegador, sem enviar a fala pra ninguém, e alimenta as ideias, as legendas e o Auto-FX. Ela ainda não está nesta versão: a faixa A1 da timeline já está reservada, e o Auto-FX hoje trabalha com os cortes de cena e o estilo. Enquanto isso, você marca as ideias à mão na faixa Ideias.</div><div class="row2"><button type="button" class="btn solid" data-act="dlg-close">Entendi</button></div></div>'; dlg.showModal(); }
+    else if (n === 'Transcrição') openTranscript();
     else if (n === 'Cortes') go('#detector');
     else if (n === 'Reenquadrar') go('.fmts');
-    else if (n === 'Tarja' || n === 'Legendas') { if (!st()) { toast('Abra um vídeo primeiro.'); return; } addItem('Adicionar ' + (n === 'Tarja' ? 'tarja' : 'legenda'), F.newText(n === 'Tarja' ? 'tarja' : 'legenda', app.ph, app.duration)); }
+    else if (n === 'Legendas' && st() && edit().transcript && edit().transcript.segs.length) makeCaptions();
+    else if (n === 'Tarja' || n === 'Legendas') { if (!st()) { toast('Abra um vídeo primeiro.'); return; } addItem('Adicionar ' + (n === 'Tarja' ? 'tarja' : 'legenda'), F.newText(n === 'Tarja' ? 'tarja' : 'legenda', app.ph, app.duration)); if (n === 'Legendas') toast('Legenda avulsa no playhead. Com a transcrição, o Workbench gera todas sozinho.'); }
     else if (n === 'Motion') { app.ui.etab = 'tec'; renderEfeitos(); go('#efeitos'); }
     else if (n === 'Sons') openSoundPicker();
     else if (n === 'Cor') hooks.go('cor');
@@ -480,6 +550,7 @@ function paramInput(ev) {
     const stt = $('#d-status'); if (stt) stt.innerHTML = 'Última ação: <b>' + esc(app.hist.label) + '</b> · passo ' + app.hist.step + ' de ' + app.hist.total;
     hooks.renderHeader(); hooks.preview(); return;
   }
+  if (act === 'seg-text') { const k = +el.dataset.k; mutLight('Corrigir transcrição', (e) => { e.transcript.segs[k].text = el.value; return e; }, 'seg:' + k); return; }
   const id = el.dataset.id; if (!id) return;
   if (act === 'param') {
     const it = items().find((f) => f.id === id); const d = F.paramDefs(it).find((x) => x.k === el.dataset.k); const v = +el.value;
@@ -498,7 +569,7 @@ function paramInput(ev) {
 function paramChange(ev) {
   const act = ev.target.dataset.act;
   if (act === 'credit-req') { mutEdit('Atribuição do overlay', (e) => M.updateFx(e, ev.target.dataset.id, (f) => { f.credit = { ...f.credit, required: ev.target.checked }; })); return; }
-  if (['param', 'sfx-vol', 'text', 'credit', 'offset', 'idea-name'].includes(act) && app.hist) { app.hist.seal(); hooks.renderAll(); }
+  if (['param', 'sfx-vol', 'text', 'credit', 'offset', 'idea-name', 'seg-text'].includes(act) && app.hist) { app.hist.seal(); hooks.renderAll(); }
 }
 
 // keyframes

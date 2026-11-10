@@ -3,6 +3,7 @@
 
 import { defaultGrade, cloneGrade } from './grade.js';
 import { newId } from './fx.js';
+import { sanitizeTranscript } from './transcript.js';
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const num = (x) => typeof x === 'number' && Number.isFinite(x);
@@ -23,7 +24,8 @@ export function newEdit() {
     cinema: clone(DEFAULT_CINEMA),
     refPal: null, // paleta de referência anotada pelo usuário (3 listas de hex)
     briefing: { name: '', notes: '' },
-    stills: [] // { id, label, group, url }
+    stills: [], // { id, label, group, url }
+    transcript: null // { lang, model, segs:[{a,b,text}] }
   };
 }
 
@@ -40,6 +42,7 @@ export function sanitizeEdit(x) {
   if (Array.isArray(x.cinema) && x.cinema.every((c) => c && typeof c.key === 'string' && typeof c.name === 'string')) d.cinema = x.cinema.map((c) => ({ dir: '', ...c, state: c.state === 'use' ? 'use' : 'saved' }));
   if (Array.isArray(x.refPal) && x.refPal.length === 3 && x.refPal.every((l) => Array.isArray(l) && l.every((h) => /^#[0-9a-f]{6}$/i.test(h)))) d.refPal = x.refPal;
   if (x.briefing && typeof x.briefing === 'object') d.briefing = { name: String(x.briefing.name || ''), notes: String(x.briefing.notes || '') };
+  if (x.transcript) d.transcript = sanitizeTranscript(x.transcript);
   if (Array.isArray(x.stills)) d.stills = x.stills.filter((s) => s && typeof s.url === 'string' && s.url.startsWith('data:image/')).slice(0, 24);
   return d;
 }

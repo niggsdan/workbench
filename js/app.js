@@ -284,7 +284,7 @@ document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
   if (el) {
     if (el.getAttribute('aria-disabled') === 'true' || el.disabled) return;
-    const a = el.dataset.act; if (['offset', 'param', 'cslider', 'sfx-vol', 'text', 'credit', 'credit-req', 'idea-name', 'dest-on'].includes(a)) return;
+    const a = el.dataset.act; if (['offset', 'param', 'cslider', 'sfx-vol', 'text', 'credit', 'credit-req', 'idea-name', 'dest-on', 'seg-text'].includes(a)) return;
     const fn = actions[a]; if (fn) { e.preventDefault(); fn(el); }
     return;
   }
@@ -312,7 +312,7 @@ window.addEventListener('drop', async (e) => {
 window.addEventListener('beforeunload', () => autosave());
 
 // pra testes e depuração
-window.__wb = { app, addEntries: Mat.addEntries, openItem: Mat.openItem, go, seek, st, edit };
+window.__wb = { app, addEntries: Mat.addEntries, openItem: Mat.openItem, go, seek, st, edit, mutEdit };
 
 go('editar');
 renderResume();

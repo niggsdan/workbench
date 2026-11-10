@@ -1,4 +1,5 @@
 // Catálogo de efeitos, texturas, sons e Auto-FX. Parte pura (sem DOM).
+import { phraseNear, pauses } from './transcript.js';
 // Os textos e parâmetros seguem o preview aprovado.
 
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
@@ -223,7 +224,7 @@ const STYLE_LOOK = { cdd: 'super8-35', aflp: '35', moon: '16' };
 const fmtT = (t) => { const tt = Math.round(t * 10); return String(Math.floor(tt / 600)).padStart(2, '0') + ':' + String(Math.floor((tt % 600) / 10)).padStart(2, '0') + ',' + (tt % 10); };
 
 // scenes: [{a,b}], cands: [{t,score}] (pode ser vazio), styleKey: cdd|aflp|moon|..., platformKey
-export function suggest({ scenes, cands = [], duration, platformKey = 'tiktok', styleKey = 'cdd' }) {
+export function suggest({ scenes, cands = [], duration, platformKey = 'tiktok', styleKey = 'cdd', segs = [] }) {
   const plat = PLATFORMS.find((p) => p.key === platformKey) || PLATFORMS[1];
   const cuts = scenes.slice(1).map((s, i) => {
     const c = cands.reduce((best, x) => (!best || Math.abs(x.t - s.a) < Math.abs(best.t - s.a) ? x : best), null);
@@ -250,10 +251,18 @@ export function suggest({ scenes, cands = [], duration, platformKey = 'tiktok', 
     if (key === 'zoom') it.b = r2(Math.min(duration, c.t + 1.5));
     if (key === 'speed') it.b = r2(Math.min(duration, a + Math.min(2.5, c.next - 0.7)));
     const how = { whip: 'a troca de plano aguenta um whip pan', flash: 'um quadro branco marca a virada', zoom: 'um zoom de ênfase dá peso pra cena que entra', speed: 'a cena é longa o bastante pra acelerar e voltar' }[key];
-    it.why = 'Corte de cena entre C' + (c.i + 1) + ' e C' + (c.i + 2) + ' em ' + fmtT(c.t) + ' (nota ' + String(r2(c.score)).replace('.', ',') + '): ' + how + '.';
+    const phrase = phraseNear(segs, c.t);
+    it.why = 'Corte de cena de C' + (c.i + 1) + ' para C' + (c.i + 2) + ' em ' + fmtT(c.t) + (phrase ? ', logo depois da frase “' + phrase + '”' : ' (nota ' + String(r2(c.score)).replace('.', ',') + ')') + ': ' + how + '.';
     it.auto = true; it.accepted = false;
     items.push(it);
   });
+  // jump cut nas pausas longas da fala (só com transcrição)
+  if (platformKey !== 'youtube') for (const p of pauses(segs, 1.2, platformKey === 'tiktok' ? 4 : 2)) {
+    if (items.some((x) => x.a < p.b && x.b > p.a)) continue;
+    const j = newTech('jump', p.a, duration); j.b = p.b;
+    j.why = 'Pausa de ' + String(r2(p.gap)).replace('.', ',') + ' s na fala em ' + fmtT(p.a) + ': o jump cut tira o respiro e deixa o ritmo do ' + (platformKey === 'tiktok' ? 'TikTok' : 'Instagram') + '.';
+    j.auto = true; j.accepted = false; items.push(j);
+  }
   // texturas pelo estilo
   const look = STYLE_LOOK[styleKey] || '35';
   const mid = cuts.length ? [...cuts].sort((a, b) => Math.abs(a.t - duration / 2) - Math.abs(b.t - duration / 2))[0].t : duration / 2;
