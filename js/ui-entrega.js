@@ -47,7 +47,7 @@ function renderPrev() {
       <dt>Duração</dt><dd>${s ? fmtClock(F.outDuration(e.fx, app.duration)) : '—'}</dd><dt>Efeitos</dt><dd>${e ? e.fx.filter((f) => f.kind === 'tec').length : 0}</dd>
       <dt>Texturas</dt><dd>${e ? e.fx.filter((f) => f.kind === 'tx').length : 0}</dd><dt>Grupos de cor</dt><dd>${e ? M.groupCount(e) : 0}</dd>
       <dt>Sugestões pendentes</dt><dd>${e ? e.fx.filter((f) => f.auto && !f.accepted).length : 0}</dd></dl>
-      <div style="display:flex;gap:6px;margin-top:6px"><button type="button" class="btn sm" data-act="step-back">◀</button><button type="button" class="btn sm solid" data-act="play">${video.paused ? 'Tocar' : 'Pausar'}</button><button type="button" class="btn sm" data-act="step-fwd">▶</button><span class="mono muted" id="e-tc" style="margin-left:auto">${fmtT(app.ph)}</span></div>
+      <div style="display:flex;gap:6px;margin-top:6px"><button type="button" class="btn sm" data-act="step-back">◀</button><button type="button" class="btn sm solid" data-act="play">${!app.player.playing ? 'Tocar' : 'Pausar'}</button><button type="button" class="btn sm" data-act="step-fwd">▶</button><span class="mono muted" id="e-tc" style="margin-left:auto">${fmtT(app.ph)}</span></div>
       <button type="button" class="btn solid" style="height:40px;margin-top:6px" data-act="export" ${s && files && !app.exporting ? '' : 'aria-disabled="true"'}>${app.exporting ? 'Exportando…' : 'Exportar ' + files + (files === 1 ? ' arquivo' : ' arquivos')}</button>
       ${e && e.fx.some((f) => f.auto && !f.accepted) ? '<div class="note">Sugestões não aceitas também entram no render. Revise no Editar se quiser.</div>' : ''}</div>`;
 }
@@ -79,8 +79,8 @@ export function render() { if (app.tab !== 'entrega') return; renderDest(); rend
 
 export function drawEnt() {
   const cv = $('#cv-ent'); if (!cv || app.view !== 'video') return; const e = edit(); if (!e) return;
-  const d = app.dest[app.focusDest]; const { w, h } = outSize(d.ratio, 640); const t = video.currentTime;
-  app.comp.render(cv, { src: video, sw: video.videoWidth, sh: video.videoHeight, t, ratio: d.ratio, ox: hooks.sceneCrop(t, d.ratio).ox, fx: e.fx, fxOn: true, comps: compsAt(e, M.groupAt(e, t)), overlays: app.overlays, W: w, H: h });
+  const d = app.dest[app.focusDest]; const { w, h } = outSize(d.ratio, 640); const t = hooks.seqTime();
+  const so = hooks.seqSource(t); if (!so) return; app.comp.render(cv, { src: so.el, sw: so.sw, sh: so.sh, t, ratio: d.ratio, ox: hooks.sceneCrop(t, d.ratio).ox, fx: e.fx, fxOn: true, comps: compsAt(e, M.groupAt(e, t)), overlays: app.overlays, W: w, H: h });
   const tc = $('#e-tc'); if (tc) tc.textContent = fmtT(app.ph);
 }
 
@@ -94,7 +94,7 @@ export async function startExport() {
   if (!on.length) { toast('Marque pelo menos um destino.'); return; }
   const e = s.edit; const container = e.container;
   app.queue = []; on.forEach((p) => piecesOf(p.key).forEach((pc) => app.queue.push({ key: p.key, ratio: app.dest[p.key].ratio, piece: pc, file: fileName(p.key, pc, container), status: 'na fila', p: 0, blob: null })));
-  const ctl = new AbortController(); app.exporting = ctl; video.pause(); render();
+  const ctl = new AbortController(); app.exporting = ctl; app.player.pause(); render();
   const frozen = JSON.parse(JSON.stringify(s));
   for (const j of app.queue) {
     if (ctl.signal.aborted) { j.status = 'cancelado'; continue; }

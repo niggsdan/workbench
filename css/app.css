@@ -522,3 +522,25 @@ body.resizing{user-select:none;cursor:grabbing}
 .v-editar .mon-right{flex:1;justify-content:flex-end;min-width:0;max-width:none}
 .v-editar .mon-right #analysis{min-width:0}
 .v-editar .tleft{flex:none}
+
+/* timeline multitrilha */
+.playhead{left:0;right:0}
+.row .name{position:sticky;left:0;z-index:4;background:var(--panel)}
+.row.trk{height:34px}.row.trk .clip{font-weight:700}
+.row.trk .name{color:var(--txt)}
+.row.newtrk{height:30px;border-top:1px dashed var(--btn-line)}
+.lane.drop{background:rgba(160,40,60,.18);outline:1.5px dashed var(--wine-line);outline-offset:-2px}
+.clip .rz.l{left:0;right:auto}
+.clip .rz{z-index:1}.clip .rz:hover{background:rgba(255,255,255,.25)}
+.clip{padding:0 8px}
+.zoom{display:flex;align-items:center;gap:5px}.zoom input{width:110px}
+.tree-row.file[draggable=true]{cursor:grab}
+.seqdlg .presets{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.seqdlg .wh{display:flex;gap:8px;align-items:end}.seqdlg .wh label{flex:1}
+/* Editar: arquivo final (MP4/MOV, Premiere/AE) só na Entrega */
+body:not(.on-entrega) #container,body:not(.on-entrega) #export-top,body:not(.on-entrega) .pkg-top{display:none!important}
+.row.ruler{position:sticky;top:0;z-index:5;background:var(--panel)}
+.tprops select{width:100%}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;margin-top:8px;font-size:11px;color:var(--soft)}
+.tgrid label{display:flex;flex-direction:column;gap:4px}.tgrid label.ck{flex-direction:row;align-items:center}
+.tgrid input[type=color]{width:100%;height:26px;border:0;background:none;padding:0}

@@ -13,6 +13,8 @@ import { SOUNDS } from './fx.js';
 import * as T from './transcript.js';
 import { EYECANDY, CATS, EYE_URL } from './eyecandy.js';
 import * as K from './masks.js';
+import * as S from './seq.js';
+import * as FT from './fonts.js';
 import { transcribe } from './transcribe.js';
 
 const SMALL = ['de', 'da', 'do', 'das', 'dos', 'à', 'e', 'a', 'o'];
@@ -105,14 +107,15 @@ const refreshLib = () => { const l = $('#lib-list'); if (l) l.innerHTML = libRow
 // ---------- monitor ----------
 export function renderMonitorBar() {
   const e = edit();
-  $('#plats').innerHTML = F.PLATFORMS.map((p) => `<button type="button" aria-pressed="${e ? e.platform === p.key : p.key === 'tiktok'}" data-act="platform" data-v="${p.key}">${p.label}</button>`).join('');
-  $('#ratios').innerHTML = P.RATIOS.map((r) => `<button type="button" data-act="ratio" data-v="${r}" aria-pressed="${r === app.ratio}">${r}</button>`).join('');
+  $('#plats').innerHTML = ''; $('#plats').hidden = true;
+  const sq = e && e.seq;
+  $('#ratios').innerHTML = `<button type="button" data-act="seq-open" aria-pressed="false" title="Tamanho da sequência em px (as redes ficam na Entrega)">Sequência ${sq ? sq.w + '×' + sq.h + ' · ' + sq.fps + ' fps' : '—'}</button>`;
   const use = proj().cinema.filter((c) => c.state === 'use');
   const first = use[0];
   $('#style-pill').textContent = 'Estilo: ' + (first ? titleCase(first.name) + (use.length > 1 ? ' +' + (use.length - 1) : '') : 'nenhum');
   const fp = $('#fxprev'); fp.setAttribute('aria-pressed', String(app.ui.fxPreview));
   $('#mtools').innerHTML = `<button type="button" data-act="mtool" data-v="seta" aria-pressed="${app.ui.mtool === 'seta'}" title="Seta: selecione e mova máscaras direto no vídeo">➚ Seta</button>` + K.MASK_TYPES.map((m) => `<button type="button" data-act="mask-add" data-k="${m.key}" title="Nova ${m.name.toLowerCase()}: ${m.hint}">${m.name}</button>`).join('');
-  $('#play').innerHTML = video.paused ? '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z" fill="currentColor"/></svg>' : '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M7 5h4v14H7z M13 5h4v14h-4z" fill="currentColor"/></svg>';
+  $('#play').innerHTML = !app.player.playing ? '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z" fill="currentColor"/></svg>' : '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M7 5h4v14H7z M13 5h4v14h-4z" fill="currentColor"/></svg>';
 }
 
 const sw = (cols) => '<div class="sw">' + cols.map((c) => `<i style="background:${c}"></i>`).join('') + '</div>';
@@ -147,18 +150,17 @@ export function renderDetector() {
     return;
   }
   const { scenes, sens } = s; const i = P.sceneAt(scenes, app.ph);
-  const canCut = P.canSplit(scenes, i, app.ph); const canGlue = scenes.length > 1;
+  const sqc = edit() && edit().seq; const tc = sqc && S.topVideoAt(sqc, app.ph); const canCut = P.canSplit(scenes, i, app.ph) || !!(tc && app.ph > tc.start + 0.05 && app.ph < tc.start + tc.dur - 0.05); const canGlue = scenes.length > 1;
   el.innerHTML = `<div class="d-head"><h2 class="tool">Cenas</h2><span class="pill-tag">${scenes.length} cenas</span>
     <div class="sens"><span class="muted" style="font-size:11px;font-weight:600">Sensibilidade</span><button type="button" class="btn sm" data-act="sens-" aria-label="Menos sensível" aria-disabled="${dis(sens > 0)}">−</button><span class="lbl">${SENS_LABELS[sens]}</span><button type="button" class="btn sm" data-act="sens+" aria-label="Mais sensível" aria-disabled="${dis(sens < 4)}">+</button></div>
     <button type="button" class="btn sm solid" data-act="detect-exact" ${app.exact ? 'aria-disabled="true"' : ''} title="Acha as mudanças de cena e corta no quadro exato">${app.exact ? esc(app.exact) : 'Detectar cenas'}</button>
     <span class="vsep"></span>
-    <button type="button" class="btn sm" data-act="cut" aria-disabled="${dis(canCut)}" title="Corta a cena no playhead (${fmtT(app.ph)})">✂ Cortar</button>
+    <button type="button" class="btn sm" data-act="cut" aria-disabled="${dis(canCut)}" title="Corta o clipe no playhead (${fmtT(app.ph)}) · tecla C">✂ Cortar</button>
     <button type="button" class="btn sm" data-act="glue" aria-disabled="${dis(canGlue)}" title="Junta ${N(i)} com a cena seguinte">Colar</button>
     <button type="button" class="btn sm" data-act="cut-" aria-disabled="${dis(P.canMoveCut(scenes, i, -0.5))}" title="Puxa o corte de entrada de ${N(i)} meio segundo pra trás">Corte −0,5 s</button>
     <button type="button" class="btn sm" data-act="cut+" aria-disabled="${dis(P.canMoveCut(scenes, i, 0.5))}" title="Empurra o corte de entrada de ${N(i)} meio segundo pra frente">Corte +0,5 s</button>
     <div class="status" id="d-status">Última ação: <b>${esc(h.label)}</b> · passo ${h.step} de ${h.total}</div>
-    <button type="button" class="btn sm" data-act="undo" aria-disabled="${dis(h.canUndo)}" title="${h.canUndo ? 'Desfazer: ' + esc(h.undoLabel) : 'Nada para desfazer'}">Desfazer</button>
-    <button type="button" class="btn sm" data-act="redo" aria-disabled="${dis(h.canRedo)}" title="${h.canRedo ? 'Refazer: ' + esc(h.redoLabel) : 'Nada para refazer'}">Refazer</button></div>`;
+</div>`;
 }
 
 // muda as cenas e mantém os grupos de cor colados nos cortes
@@ -169,7 +171,7 @@ function moveCut(d) {
   const { scenes } = st(); const i = curScene(); if (!P.canMoveCut(scenes, i, d)) return;
   const n = P.moveCut(scenes, i, d);
   if (app.ph < n[i].a) app.ph = P.r1(n[i].a + 0.1);
-  video.currentTime = app.ph;
+  hooks.seek(app.ph);
   commitScenes('Mover corte de ' + N(i) + ' ' + (d < 0 ? '−' : '+') + '0,5 s', n);
 }
 function setSens(d) {
@@ -207,54 +209,76 @@ const laneTime = (lane, x) => { const r = lane.getBoundingClientRect(); return c
 const pc = (t) => (t / app.duration * 100).toFixed(3) + '%';
 const span = (a, b) => `left:${pc(a)};width:${((b - a) / app.duration * 100).toFixed(3)}%`;
 
-function tickStep(d) { for (const s of [1, 2, 5, 10, 15, 30, 60, 120, 300, 600]) if (d / s <= 12) return s; return 600; }
+function tickStep(d) { for (const s of [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600]) if (d / s <= 12) return s; return 600; }
+const KLAB = { tec: 'FX', tx: 'Textura', ov: 'Overlay', mk: 'Máscara', tt: 'Texto', sx: 'SFX' };
+const KCLS = { tec: 'fx', tx: 'tx', ov: 'ov', mk: 'mk', tt: 'tt', sx: 'sfx' };
+const zoom = () => app.ui.tlZoom || 1;
+export function setZoom(z, keepT = app.ph) {
+  const body = $('#timeline'); const old = zoom(); z = clamp(Math.round(z * 100) / 100, 1, 40); if (z === old) return;
+  app.ui.tlZoom = z; const gr = body && body.querySelector('.tl-grid'); if (!gr) return renderTimeline();
+  gr.style.width = 'calc(' + (z * 100) + '% - 10px)';
+  const lane = gr.querySelector('.lane'); if (lane) body.scrollLeft = Math.max(0, lane.offsetLeft + keepT / app.duration * lane.offsetWidth - body.clientWidth / 2);
+  const zr = $('#tl-zoom'); if (zr) zr.value = z; const zl = $('#tl-zl'); if (zl) zl.textContent = Math.round(z * 100) + '%';
+}
 
 export function renderTimeline() {
   const el = $('#tl-card'); const s = st(); const e = edit();
-  const plat = e ? F.PLATFORMS.find((p) => p.key === e.platform) : F.PLATFORMS[1];
-  el.innerHTML = `<div class="tl-head"><div class="l"><h2 class="tool">Timeline</h2><span class="muted" style="font-weight:600">${plat.label.split(' · ')[0]} · ${s ? fmtClock(F.outDuration(e.fx, app.duration)).padStart(5, '0') : '00:00'}</span></div>
-    <div class="legend"><button type="button" class="pclose" data-act="panel-close" data-k="tl" title="Fechar painel" aria-label="Fechar painel">–</button><span class="k"><i style="background:#e6e7e9"></i>Vídeo</span><span class="k"><i style="background:#6b7077"></i>Cenas</span><span class="k"><i style="background:var(--wine)"></i>FX</span><span class="k"><i style="border:1.5px solid var(--wine-line)"></i>Textura</span>
-</div></div>
+  const prevScroll = $('#timeline') ? [$('#timeline').scrollLeft, $('#timeline').scrollTop] : null;
+  const sq = e && e.seq;
+  el.innerHTML = `<div class="tl-head"><div class="l"><h2 class="tool">Timeline</h2><span class="muted" style="font-weight:600">${sq ? sq.w + '×' + sq.h + ' · ' : ''}${s ? fmtClock(app.duration).padStart(5, '0') : '00:00'}</span></div>
+    <div class="legend"><span class="zoom"><button type="button" class="btn sq sm" data-act="tl-zoom" data-d="-1" title="Afastar (Ctrl + roda)">−</button><input id="tl-zoom" type="range" min="1" max="40" step="0.25" value="${zoom()}" aria-label="Zoom da timeline"><button type="button" class="btn sq sm" data-act="tl-zoom" data-d="1" title="Aproximar (Ctrl + roda)">+</button><span class="mono muted" id="tl-zl">${Math.round(zoom() * 100)}%</span></span><button type="button" class="pclose" data-act="panel-close" data-k="tl" title="Fechar painel" aria-label="Fechar painel">–</button></div></div>
     <div class="tl-body" id="timeline"></div>`;
   const body = $('#timeline');
-  if (!s) { body.innerHTML = '<div class="tl-empty">A timeline aparece quando um vídeo for aberto.</div>'; return; }
-  const D = app.duration; const g = (name, html, cls = '', lane = '') => `<div class="row ${cls}"><div class="name${cls === 'fxr' ? ' wine' : ''}">${name}</div><div class="lane" data-lane="${lane}">${html}</div></div>`;
-  const ticks = []; for (let t = 0; t <= D; t += tickStep(D)) ticks.push(`<span class="tick" style="left:${pc(t)}">${fmtClock(t)}</span>`);
-  const clip = (it, cls, label, a = it.a, b = it.b) => `<div class="clip ${cls}${app.ui.sel === it.id ? ' sel' : ''}${it.auto && !it.accepted ? ' sug' : ''}" data-clip="${it.id}" style="${span(a, b)}" title="${esc(nice(it.name))} · ${fmtT(it.a)} → ${fmtT(it.b)}">${esc(label)}<span class="rz" data-rz="1"></span></div>`;
-  const tec = e.fx.filter((f) => f.kind === 'tec').map((f) => clip(f, 'fx', f.key === 'dolly' ? 'Dolly' : 'FX · ' + nice(f.name))).join('');
-  const tex = e.fx.filter((f) => f.kind === 'tx').map((f) => clip(f, 'tx', nice(f.name))).join('');
-  const ov = e.fx.filter((f) => f.kind === 'ov').map((f) => clip(f, 'ov', f.file || 'overlay')).join('');
-  const tt = e.fx.filter((f) => f.kind === 'tt').map((f) => clip(f, 'tt', f.params.text || f.name)).join('');
-  const sfx = e.fx.filter((f) => f.sfx).map((f) => { const sd = F.SOUNDS.find((x) => x.key === f.sfx.key) || { dur: 0.5, key: '' }; const a = clamp(f.kind === 'sx' ? f.a : f.a + f.sfx.off, 0, D); const b = Math.min(D, a + (f.sfx.key === 'projector' ? Math.min(2, f.b - f.a) : sd.dur)); return `<div class="clip sfx${app.ui.sel === f.id ? ' sel' : ''}" data-sfx="${f.id}" style="${span(a, Math.max(b, a + 0.4))}" title="Som: ${esc(F.soundName(f.sfx.key))}">${esc(sd.key === 'projector' ? 'projetor' : (f.sfx.key))}</div>`; }).join('');
+  if (!s) { body.innerHTML = '<div class="tl-empty">Arraste um vídeo do Material pra cá, ou clique nele, pra começar a sequência.</div>'; return; }
+  const D = app.duration;
+  const g = (name, html, cls = '', lane = '', extra = '') => `<div class="row ${cls}"><div class="name${cls === 'fxr' ? ' wine' : ''}">${name}</div><div class="lane" data-lane="${lane}"${extra}>${html}</div></div>`;
+  const ticks = []; const stp = tickStep(D / zoom()); for (let t = 0; t <= D; t += stp) ticks.push(`<span class="tick" style="left:${pc(t)}">${stp < 1 ? fmtT(t) : fmtClock(t)}</span>`);
+  const clip = (it, cls, label, a = it.a, b = it.b) => `<div class="clip ${cls}${app.ui.sel === it.id ? ' sel' : ''}${it.auto && !it.accepted ? ' sug' : ''}" data-clip="${it.id}" style="${span(a, b)}" title="${esc(nice(it.name))} · ${fmtT(it.a)} → ${fmtT(it.b)}"><span class="rz l" data-rz="l"></span>${esc(label)}<span class="rz" data-rz="r"></span></div>`;
+  // cada efeito numa camada própria (a mais nova em cima)
+  const lay = e.fx.filter((f) => !f.cap).slice().reverse();
+  const cnt = {}; const order = e.fx.filter((f) => !f.cap).map((f) => { cnt[f.kind] = (cnt[f.kind] || 0) + 1; return [f.id, cnt[f.kind]]; }); const num = Object.fromEntries(order);
+  const fxRows = lay.map((f) => {
+    const lbl = f.kind === 'tec' ? (f.key === 'dolly' ? 'Dolly' : nice(f.name)) : f.kind === 'ov' ? (f.file || 'overlay') : f.kind === 'tt' ? (f.params.text || f.name) : f.kind === 'mk' ? K.maskType(f.key).name : f.kind === 'sx' ? F.soundName(f.sfx.key) : nice(f.name);
+    let html = clip(f, KCLS[f.kind] || 'fx', lbl);
+    if (f.kind === 'mk') html = html.replace(/<span class="rz" data-rz="r"><\/span><\/div>$/, f.shapeKf.map((k) => `<b class="kfd" style="left:${((k.t - f.a) / Math.max(0.01, f.b - f.a) * 100).toFixed(2)}%"></b>`).join('') + '<span class="rz" data-rz="r"></span></div>');
+    let row = g(`${KLAB[f.kind] || 'FX'} ${num[f.id]}`, html, f.kind === 'tec' || f.kind === 'tx' ? 'fxr' : '', 'fx');
+    if (f.sfx && f.kind !== 'sx') {
+      const sd = F.SOUNDS.find((x) => x.key === f.sfx.key) || { dur: 0.5 }; const a = clamp(f.a + f.sfx.off, 0, D); const b = Math.min(D, a + (f.sfx.key === 'projector' ? Math.min(2, f.b - f.a) : sd.dur));
+      row = g(`SFX · ${KLAB[f.kind] || 'FX'} ${num[f.id]}`, `<div class="clip sfx${app.ui.sel === f.id ? ' sel' : ''}" data-sfx="${f.id}" style="${span(a, Math.max(b, a + 0.4))}" title="Som: ${esc(F.soundName(f.sfx.key))} (arraste pra mudar o tempo)">${esc(F.soundName(f.sfx.key))}</div>`, '', 'sfx') + row;
+    }
+    return row;
+  }).join('');
+  const caps = e.fx.filter((f) => f.cap);
   const ideas = e.ideas.map((i) => `<div class="clip idea${app.ui.selIdea === i.id ? ' sel' : ''}" data-idea="${i.id}" style="${span(i.a, i.b)}">${esc(i.name)}</div>`).join('');
   const cuts = s.scenes.slice(1).map((sc, n) => `<span class="cutm${n + 1 === curScene() ? ' sel' : ''}" style="left:${pc(sc.a)}"></span>`).join('');
   const ng = M.groupCount(e); const gi = curGroup();
   const groups = Array.from({ length: ng }, (_, i) => { const [a, b] = M.groupRange(e, i, D); return `<div class="clip g${i === gi ? ' on' : ''}" data-grp="${i}" style="${span(a, b)};cursor:pointer">G${i + 1}</div>`; }).join('');
   const scenes = s.scenes.map((sc, n) => `<div class="clip v2${n % 2 ? ' alt' : ''}${n === curScene() ? ' cur' : ''}" data-scn="${n}" style="${span(sc.a, sc.b)};cursor:pointer">${N(n)}</div>`).join('');
-  const it = app.lib.get(app.activeId);
-  body.innerHTML = `<div class="tl-grid">
+  const sclip = (c) => `<div class="clip ${c.kind === 'audio' ? 'a' : 'v1'}${app.ui.selClip === c.id ? ' sel' : ''}" data-sc="${c.id}" style="${span(c.start, c.start + c.dur)}" title="${esc(c.name)} · ${fmtT(c.start)} → ${fmtT(c.start + c.dur)} (entra em ${fmtT(c.in)})"><span class="rz l" data-rz="l"></span>${esc(c.name)}<span class="rz" data-rz="r"></span></div>`;
+  const vt = sq ? S.tracksOf(sq, 'video').reverse() : []; const at = sq ? S.tracksOf(sq, 'audio') : [];
+  const trow = (t) => g(t.id + (t.kind === 'video' ? ' · Vídeo' : ' · Áudio'), sq.clips.filter((c) => c.track === t.id).map(sclip).join('') + (t.kind === 'audio' && t.id === 'A1' && !sq.clips.some((c) => c.track === 'A1') ? '<span class="lane-hint">O som dos vídeos toca junto. Solte músicas e áudios aqui.</span>' : ''), 'trk', 'trk', ` data-track="${t.id}"`);
+  body.innerHTML = `<div class="tl-grid" style="width:calc(${zoom() * 100}% - 10px)">
     ${g('', ticks.join(''), 'ruler', 'ruler')}
+    ${fxRows}
+    ${caps.length ? g('Legendas', caps.map((f) => clip(f, 'tt', f.params.text || f.name)).join(''), '', 'cap') : ''}
+    ${vt.map(trow).join('')}
+    ${at.map(trow).join('')}
+    ${g('Transcrição', e.transcript && e.transcript.segs.length ? e.transcript.segs.map((sg, k) => `<div class="clip a${app.ui.seg === k ? ' sel' : ''}" data-seg="${k}" style="${span(sg.a, Math.max(sg.b, sg.a + 0.3))};cursor:pointer" title="${esc(sg.text)}">${esc(sg.text)}</div>`).join('') : `<span class="lane-hint">${app.tr.busy ? esc(app.tr.stage) : 'Sem transcrição. Use a ferramenta Transcrição no menu da esquerda.'}</span>`, '', 'a1')}
+    ${g('+ Faixa', '<span class="lane-hint">Solte aqui um arquivo do Material pra criar uma faixa nova</span>', 'newtrk', 'new', ' data-track="new"')}
+    ${g('Cenas', cuts + scenes, '', 'scn')}
+    ${g('Cor · grupos', groups, '', 'grp')}
     ${g('Ideias <button type="button" class="btn sm" style="margin-left:6px;height:18px;padding:0 6px" data-act="idea-add" title="Marca uma ideia na cena atual (vira um corte no TikTok)">+</button>', ideas, '', 'ideas')}
-    ${g('Cortes de cena', cuts, '', 'cuts')}
-    ${g('FX · técnicas', tec, 'fxr', 'fx')}
-    ${g('Textura e lente', tex, 'fxr', 'tx')}
-    ${g('Overlay', ov, '', 'ov')}
-    ${g('Máscaras', e.fx.filter((f) => f.kind === 'mk').map((f) => clip(f, 'mk', K.maskType(f.key).name) .replace('</div>', f.shapeKf.map((k) => `<b class="kfd" style="left:${((k.t - f.a) / Math.max(0.01, f.b - f.a) * 100).toFixed(2)}%"></b>`).join('') + '</div>')).join(''), '', 'mk')}
-    ${g('Texto', tt, '', 'tt')}
-    ${g('SFX', sfx, '', 'sfx')}
-    ${g('Cor · grade por cena', groups, '', 'grp')}
-    ${g('V2 · Cenas', scenes, '', 'scn')}
-    ${g('V1 · Vídeo', `<div class="clip v1" style="left:0;width:100%;cursor:default">${esc(app.name)}</div>`, '', 'v1')}
-    ${g('A1 · Transcrição', e.transcript && e.transcript.segs.length ? e.transcript.segs.map((sg, k) => `<div class="clip a${app.ui.seg === k ? ' sel' : ''}" data-seg="${k}" style="${span(sg.a, Math.max(sg.b, sg.a + 0.3))};cursor:pointer" title="${esc(sg.text)}">${esc(sg.text)}</div>`).join('') : `<span class="lane-hint">${app.tr.busy ? esc(app.tr.stage) : 'Sem transcrição. Use a ferramenta Transcrição no menu da esquerda.'}</span>`, '', 'a1')}
-    ${g('A2 · Áudio', `<div class="clip a" style="left:0;width:100%;cursor:default">${esc(it && it.kind === 'video' ? 'áudio de ' + it.name : 'áudio')}</div>`, '', 'a2')}
     <div class="playhead" aria-hidden="true"><i id="ph-line"></i><u id="ph-knob"></u></div></div>`;
+  if (prevScroll) { body.scrollLeft = prevScroll[0]; body.scrollTop = prevScroll[1]; }
   syncPlayhead();
 }
 export function syncPlayhead() {
   const line = $('#ph-line'); if (!line || !app.duration) return;
-  const t = app.view === 'video' ? video.currentTime : app.ph;
-  const left = (clamp(t, 0, app.duration) / app.duration * 100).toFixed(3) + '%';
-  line.style.left = left; $('#ph-knob').style.left = left;
+  const t = app.view === 'video' || app.view === 'audio' ? hooks.seqTime() : app.ph;
+  const lane = document.querySelector('#timeline .lane'); if (!lane) return;
+  const left = lane.offsetLeft + clamp(t, 0, app.duration) / app.duration * lane.offsetWidth;
+  line.style.left = left + 'px'; $('#ph-knob').style.left = left + 'px';
+  if (app.player.playing && zoom() > 1) { const b = $('#timeline'); if (left > b.scrollLeft + b.clientWidth - 40 || left < b.scrollLeft + 132) b.scrollLeft = left - 160; }
 }
 
 // arrastar e redimensionar itens da timeline
@@ -263,36 +287,67 @@ function snapTimes(exceptId) {
   const e = edit(); const out = [0, app.duration, app.ph];
   st().scenes.forEach((s) => out.push(s.a));
   e.fx.forEach((f) => { if (f.id !== exceptId) { out.push(f.a, f.b); } });
+  if (e.seq) e.seq.clips.forEach((c) => { if (c.id !== exceptId) out.push(c.start, c.start + c.dur); });
   return out;
 }
+const snapTo = (v, snaps) => { const tol = 0.12 / zoom() * 2; for (const s of snaps) if (Math.abs(v - s) < tol) return s; return v; };
 function onPointerDown(ev) {
+  if (ev.button) return;
+  const sc = ev.target.closest('[data-sc]');
+  if (sc && st()) {
+    const c = edit().seq.clips.find((x) => x.id === sc.dataset.sc); if (!c) return;
+    app.ui.selClip = c.id; app.ui.sel = null; app.ui.seg = null; app.ui.itab = 'clipe';
+    drag = { sid: c.id, mode: ev.target.dataset.rz === 'l' ? 'l' : ev.target.dataset.rz ? 'r' : 'move', x0: ev.clientX, lane: sc.closest('.lane'), s0: c.start, d0: c.dur, track0: c.track, moved: false };
+    sc.setPointerCapture && sc.setPointerCapture(ev.pointerId); hooks.renderSel(); ev.preventDefault(); return;
+  }
   const c = ev.target.closest('[data-clip],[data-sfx]');
   if (!c || !st()) return;
   const id = c.dataset.clip || c.dataset.sfx; const it = edit().fx.find((f) => f.id === id); if (!it) return;
-  app.ui.sel = id; app.ui.selRef = null; app.ui.itab = 'efeito';
+  app.ui.sel = id; app.ui.selRef = null; app.ui.selClip = null; app.ui.itab = 'efeito';
   const lane = c.closest('.lane');
-  drag = { id, mode: c.dataset.sfx ? 'sfx' : ev.target.dataset.rz ? 'resize' : 'move', x0: ev.clientX, lane, a0: it.a, b0: it.b, off0: it.sfx ? it.sfx.off : 0, kf0: it.shapeKf ? it.shapeKf.map((k) => ({ ...k })) : null, moved: false };
+  drag = { id, mode: c.dataset.sfx ? 'sfx' : ev.target.dataset.rz === 'l' ? 'resizel' : ev.target.dataset.rz ? 'resize' : 'move', x0: ev.clientX, lane, a0: it.a, b0: it.b, off0: it.sfx ? it.sfx.off : 0, kf0: it.shapeKf ? it.shapeKf.map((k) => ({ ...k })) : null, moved: false };
   c.setPointerCapture && c.setPointerCapture(ev.pointerId);
   hooks.renderSel();
   ev.preventDefault();
 }
+const lenParams = (f) => { if (f.kind === 'tec') F.techOf(f.key).params.forEach((p) => { if (p.len === true) f.params[p.k] = clamp(Math.round((f.b - f.a) * F.FPS), p.min, p.max); else if (p.len === 's') f.params[p.k] = clamp(Math.round((f.b - f.a) * 10) / 10, p.min, p.max); }); };
 function onPointerMove(ev) {
   if (!drag) return;
   const r = drag.lane.getBoundingClientRect(); const dt = (ev.clientX - drag.x0) / r.width * app.duration;
-  if (!drag.moved && Math.abs(ev.clientX - drag.x0) < 3) return;
+  if (!drag.moved && Math.abs(ev.clientX - drag.x0) < 3 && !drag.sid) return;
+  if (!drag.moved && Math.abs(ev.clientX - drag.x0) < 3 && Math.abs(ev.movementY) < 3) return;
   drag.moved = true;
-  const snaps = app.ui.snap ? snapTimes(drag.id) : [];
+  const snaps = app.ui.snap !== false ? snapTimes(drag.id || drag.sid) : [];
   const D = app.duration;
+  if (drag.sid) {
+    const over = document.elementFromPoint(ev.clientX, ev.clientY); const tl = over && over.closest('[data-track]'); const track = tl ? tl.dataset.track : drag.track0;
+    mutLight('Mover clipe', (e2) => {
+      const sq = e2.seq; const c = sq.clips.find((x) => x.id === drag.sid); if (!c) return e2;
+      if (drag.mode === 'move') {
+        let ns = Math.max(0, drag.s0 + dt); const ne = snapTo(ns + drag.d0, snaps); ns = snapTo(ns, snaps) !== ns ? snapTo(ns, snaps) : ne - drag.d0;
+        let tk = track; if (tk === 'new') tk = drag.newTk && sq.tracks.some((x) => x.id === drag.newTk) ? drag.newTk : (drag.newTk = S.addTrack(sq, c.kind === 'audio' ? 'audio' : 'video'));
+        S.moveClip(sq, c.id, ns, tk);
+      } else if (drag.mode === 'l') S.trimClip(sq, c.id, 'l', snapTo(drag.s0 + dt, snaps));
+      else S.trimClip(sq, c.id, 'r', snapTo(drag.s0 + drag.d0 + dt, snaps));
+      return e2;
+    }, 'sdrag:' + drag.sid);
+    renderTimeline(); hooks.preview(); return;
+  }
   mutLight('Mover ' + nice(edit().fx.find((f) => f.id === drag.id).name), (e2) => {
     const f = e2.fx.find((x) => x.id === drag.id);
-    if (drag.mode === 'move') { const [a, b] = M.moveTimes(drag.a0, drag.b0, dt, D, snaps); f.a = a; f.b = b; if (f.kind === 'mk') f.shapeKf = drag.kf0.map((k) => ({ ...k, t: Math.round((k.t + a - drag.a0) * 1000) / 1000 })); }
-    else if (drag.mode === 'resize') { let nb = clamp(drag.b0 + dt, drag.a0 + 0.1, D); for (const s of snaps) if (Math.abs(nb - s) < 0.12) { nb = s; break; } f.b = Math.round(nb * 100) / 100; if (f.kind === 'tec') F.techOf(f.key).params.forEach((p) => { if (p.len === true) f.params[p.k] = clamp(Math.round((f.b - f.a) * F.FPS), p.min, p.max); else if (p.len === 's') f.params[p.k] = clamp(Math.round((f.b - f.a) * 10) / 10, p.min, p.max); }); }
+    if (drag.mode === 'move') { const [a, b] = M.moveTimes(drag.a0, drag.b0, dt, Math.max(D, drag.b0), snaps); f.a = a; f.b = b; if (f.kind === 'mk') f.shapeKf = drag.kf0.map((k) => ({ ...k, t: Math.round((k.t + a - drag.a0) * 1000) / 1000 })); }
+    else if (drag.mode === 'resize') { f.b = Math.round(snapTo(clamp(drag.b0 + dt, drag.a0 + 0.1, D), snaps) * 100) / 100; lenParams(f); }
+    else if (drag.mode === 'resizel') { f.a = Math.round(snapTo(clamp(drag.a0 + dt, 0, drag.b0 - 0.1), snaps) * 100) / 100; lenParams(f); }
     else { const na = clamp(drag.a0 + drag.off0 + dt, 0, D); f.sfx.off = Math.round((na - (f.kind === 'sx' ? 0 : drag.a0)) * 100) / 100; if (f.kind === 'sx') { f.a = Math.round(na * 100) / 100; f.b = f.a + 0.5; } }
     return e2;
   }, 'drag:' + drag.id);
   renderTimeline(); hooks.preview();
 }
-function onPointerUp() { if (drag) { if (drag.moved) { app.hist.seal(); hooks.renderAll(); } drag = null; } }
+function onPointerUp() {
+  if (!drag) return;
+  if (drag.moved) { if (drag.sid) mutLight('Ajustar clipe', (e2) => { S.tidy(e2.seq); return e2; }, 'sdrag:' + drag.sid); app.hist.seal(); hooks.renderAll(); }
+  drag = null;
+}
 
 // atualiza o histórico sem redesenhar tudo (gestos contínuos)
 export function mutLight(label, fn, key) {
@@ -302,21 +357,39 @@ export function mutLight(label, fn, key) {
   hooks.renderHeader();
 }
 
+// soltar arquivo do Material na timeline
+async function dropMaterial(ev) {
+  const id = ev.dataTransfer.getData('text/wb-lib'); if (!id) return;
+  ev.preventDefault(); document.querySelectorAll('.lane.drop').forEach((l) => l.classList.remove('drop'));
+  const it = app.lib.get(id); if (!it || it.kind === 'other') return;
+  if (!st()) { if (it.kind === 'video') hooks.openItem(id); else toast('Comece por um vídeo: ele vira a primeira faixa.'); return; }
+  const lane = ev.target.closest('[data-track]'); const lt = ev.target.closest('.lane');
+  const t = lt ? laneTime(lt, ev.clientX) : app.ph;
+  let dur = 5;
+  if (it.kind !== 'image') { toast('Preparando ' + it.name + '…', 1500); try { dur = await hooks.mediaDur(it); } catch (err) { toast('Não consegui ler ' + it.name + '.'); return; } }
+  mutEdit('Pôr ' + it.name + ' na sequência', (e2) => {
+    const sq = e2.seq; let track = lane ? lane.dataset.track : null;
+    const want = it.kind === 'audio' ? 'audio' : 'video';
+    if (track === 'new') track = S.addTrack(sq, want);
+    if (track && !sq.tracks.some((x) => x.id === track && x.kind === want)) track = null;
+    S.addClip(sq, { lib: id, name: it.name, kind: it.kind, dur, start: lane || lt ? t : null, track, src: dur });
+    return e2;
+  });
+}
+
 function laneClick(ev) {
   const lane = ev.target.closest('[data-lane]'); if (!lane || !app.duration) return;
-  const t = laneTime(lane, ev.clientX); const kind = lane.dataset.lane;
-  const grp = ev.target.closest('[data-grp]'); const scn = ev.target.closest('[data-scn]'); const idea = ev.target.closest('[data-idea]'); const sg = ev.target.closest('[data-seg]');
-  if (sg) { const k = +sg.dataset.seg; app.ui.seg = k; app.ui.sel = null; app.ui.selIdea = null; app.ui.itab = 'clipe'; hooks.seek(edit().transcript.segs[k].a + 0.01); hooks.renderAll(); return; }
+  if (drag && drag.moved) return;
+  const t = laneTime(lane, ev.clientX);
+  const grp = ev.target.closest('[data-grp]'); const idea = ev.target.closest('[data-idea]'); const sg = ev.target.closest('[data-seg]'); const scn = ev.target.closest('[data-scn]');
+  if (sg) { const k = +sg.dataset.seg; app.ui.seg = k; app.ui.sel = null; app.ui.selIdea = null; app.ui.selClip = null; app.ui.itab = 'clipe'; hooks.seek(edit().transcript.segs[k].a + 0.01); hooks.renderAll(); return; }
   if (ev.target.closest('[data-clip],[data-sfx]')) return;
+  if (ev.target.closest('[data-sc]')) { hooks.seek(t); return; }
   if (grp) { app.ui.node = null; hooks.selectGroup(+grp.dataset.grp); return; }
   if (idea) { app.ui.selIdea = idea.dataset.idea; app.ui.sel = null; app.ui.itab = 'clipe'; hooks.seek(clamp(+edit().ideas.find((i) => i.id === idea.dataset.idea).a + 0.05, 0, app.duration)); hooks.renderAll(); return; }
-  if (false) {
-    const { scenes } = st(); const tt = P.r1(t); const i = P.sceneAt(scenes, tt);
-    if (P.canSplit(scenes, i, tt)) { app.ph = tt; commitScenes('Lâmina: dividir ' + N(i) + ' em ' + fmtT(tt), P.split(scenes, i, tt)); hooks.seek(tt); } else toast('Aqui a cena ficaria menor que 0,5 s.');
-    return;
-  }
+  if (!scn && lane.dataset.lane !== 'ruler') { app.ui.selClip = null; app.ui.sel = null; }
   hooks.seek(t);
-  if (scn) { app.ui.itab = 'clipe'; app.ui.seg = null; }
+  if (scn) { app.ui.itab = 'clipe'; app.ui.seg = null; app.ui.selClip = null; }
 }
 
 // ---------- inspetor ----------
@@ -339,6 +412,16 @@ function itemHtml(it) {
       <div style="margin-top:6px"><button type="button" class="btn sm" data-act="sfx-play" data-id="${it.id}">Ouvir</button> <button type="button" class="btn sm" data-act="sfx-off" data-id="${it.id}">Remover som</button></div></div>`
     : (it.kind === 'sx' ? '' : `<div class="box"><div class="r"><small>Sem som neste item</small><button type="button" class="btn sm" data-act="sfx-add" data-id="${it.id}">Adicionar som</button></div></div>`);
   const textF = tex ? `<div class="field" style="margin-top:8px">Texto<input type="text" value="${esc(it.params.text)}" data-act="text" data-k="text" data-id="${it.id}"></div>${it.key === 'tarja' ? `<div class="field" style="margin-top:8px">Subtítulo<input type="text" value="${esc(it.params.sub)}" data-act="text" data-k="sub" data-id="${it.id}"></div>` : ''}` : '';
+  const ts = tex && it.key !== 'tarja' ? FT.tstyle(it.params) : null; const all = !!app.ui.tAll;
+  const tProps = ts ? `<div class="tprops"><h3>Propriedades do texto</h3>
+    <div class="seg sm" style="margin-top:6px"><button type="button" data-act="t-scope" data-v="0" aria-pressed="${!all}">Só esta</button><button type="button" data-act="t-scope" data-v="1" aria-pressed="${all}">Todas ${it.cap ? 'as legendas' : 'os textos'}</button></div>
+    <div class="field" style="margin-top:8px">Fonte<select data-act="tstyle" data-k="font" data-id="${it.id}">${FT.FONTS.map((f) => `<option${f === ts.font ? ' selected' : ''}>${f}</option>`).join('')}</select></div>
+    <div class="tgrid"><label>Tamanho<input type="range" min="2" max="14" step="0.5" value="${ts.size}" data-act="tstyle" data-k="size" data-id="${it.id}"></label>
+    <label>Altura na tela<input type="range" min="5" max="95" value="${ts.y}" data-act="tstyle" data-k="y" data-id="${it.id}"></label>
+    <label>Cor<input type="color" value="${ts.color}" data-act="tstyle" data-k="color" data-id="${it.id}"></label>
+    <label>Peso<select data-act="tstyle" data-k="weight" data-id="${it.id}">${[400, 700, 800].map((w) => `<option value="${w}"${+ts.weight === w ? ' selected' : ''}>${{ 400: 'Normal', 700: 'Negrito', 800: 'Extra' }[w]}</option>`).join('')}</select></label>
+    <label>Contorno<input type="range" min="0" max="30" value="${ts.stroke}" data-act="tstyle" data-k="stroke" data-id="${it.id}"></label>
+    <label class="ck"><input type="checkbox" ${+ts.bg ? 'checked' : ''} data-act="tstyle" data-k="bg" data-id="${it.id}"> Fundo escuro</label></div></div>` : '';
   const ovF = it.kind === 'ov' ? `<div class="box" style="margin-top:10px"><div class="r"><b>${esc(it.file || 'overlay')}</b></div><small>Licença gratuita · atribuição ${it.credit.required ? 'obrigatória' : 'não exigida'}</small>
       <div class="field" style="margin-top:6px">Criador<input type="text" placeholder="Nome do criador" value="${esc(it.credit.creator)}" data-act="credit" data-id="${it.id}"></div>
       <label class="toggle" style="margin-top:6px"><input type="checkbox" ${it.credit.required ? 'checked' : ''} data-act="credit-req" data-id="${it.id}"> Exige atribuição (entra em creditos.txt na entrega)</label></div>` : '';
@@ -351,7 +434,7 @@ function itemHtml(it) {
     <div class="mono muted" id="i-range">${fmtT(it.a)} → ${fmtT(it.b)}</div>
     <div><h3>Por que aqui</h3><div class="why" style="margin-top:6px">${esc(it.why || '')}</div></div>
     ${mkBlock}
-    ${defs.length || tex || it.kind === 'ov' ? `<div><h3>${tex ? 'Conteúdo' : 'Parâmetros'}</h3>${textF}${defs.map((d) => sliderHtml(it, d)).join('')}${ovF}</div>` : ''}
+    ${defs.length || tex || it.kind === 'ov' ? `<div><h3>${tex ? 'Conteúdo' : 'Parâmetros'}</h3>${textF}${defs.map((d) => sliderHtml(it, d)).join('')}${ovF}</div>` : ''}${tProps}
     ${it.kf && it.kf.length ? `<div><h3>Keyframes</h3><div style="margin-top:6px">${kfHtml(it)}</div></div>` : ''}
     ${it.kind !== 'tt' && it.kind !== 'mk' ? `<div><h3>Som do efeito</h3><div style="margin-top:6px">${sfx}</div></div>` : ''}
     <div><h3>Receita</h3><div style="margin-top:6px;line-height:1.5">${esc(F.recipeOf(it))}</div>${eyeOf(it) ? `<a class="btn sm" style="margin-top:8px" href="${EYE_URL + eyeOf(it)}" target="_blank" rel="noopener noreferrer">Ver referência no Eyecandy ↗</a>` : ''}</div>
@@ -359,7 +442,12 @@ function itemHtml(it) {
 }
 function clipeHtml() {
   const s = st(); if (!s) return '<div class="hint-empty">Abra um vídeo pra ver os dados do clipe.</div>';
-  const e = edit(); const i = curScene(); const sc = s.scenes[i]; const gi = curGroup();
+  const e = edit();
+  const sc0 = e.seq && e.seq.clips.find((c) => c.id === app.ui.selClip);
+  if (sc0) return `<div class="chips"><span class="kchip o">Clipe · ${sc0.track}</span></div><h3 class="big" style="font-size:20px;text-transform:none;letter-spacing:0;color:var(--txt)">${esc(sc0.name)}</h3>
+    <div class="box"><div class="r"><span>Na sequência</span><b class="mono">${fmtT(sc0.start)} → ${fmtT(sc0.start + sc0.dur)}</b></div><div class="r" style="margin-top:6px"><span>Duração</span><b class="mono">${fmtT(sc0.dur)}</b></div><div class="r" style="margin-top:6px"><span>Entra no arquivo em</span><b class="mono">${fmtT(sc0.in)}</b></div></div>
+    <div class="note">Arraste o meio pra mover (inclusive pra outra faixa). Puxe as pontas pra aparar. C corta no playhead, Delete apaga.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn sm" data-act="clip-split">✂ Cortar no playhead</button><button type="button" class="btn sm" data-act="clip-del">Apagar clipe</button></div>`; const i = curScene(); const sc = s.scenes[i]; const gi = curGroup();
   const over = e.fx.filter((f) => f.a < sc.b && f.b > sc.a);
   const idea = e.ideas.find((x) => x.id === app.ui.selIdea);
   const sg = e.transcript && app.ui.seg != null ? e.transcript.segs[app.ui.seg] : null;
@@ -432,6 +520,21 @@ function openBriefing() {
     <div class="row2"><button type="button" class="btn" data-act="dlg-close">Cancelar</button><button type="button" class="btn solid" data-act="briefing-save">Salvar</button></div></div>`;
   dlg.showModal();
 }
+export function openSeq(first) {
+  const sq = edit() && edit().seq; if (!sq) { toast('Abra um vídeo primeiro.'); return; }
+  const it = app.lib.get(app.activeId); const vw = video.videoWidth; const vh = video.videoHeight;
+  const pre = [['Vertical', 1080, 1920], ['Horizontal', 1920, 1080], ['Quadrado', 1080, 1080], ['4:5', 1080, 1350], ['4K', 3840, 2160]];
+  if (vw && vh) pre.unshift(['Igual ao vídeo', vw, vh]);
+  const dlg = $('#dlg');
+  dlg.innerHTML = `<div class="dlg seqdlg"><h2>${first ? 'Tamanho da sequência' : 'Sequência'}</h2>
+    <div class="note">${first ? 'Defina o quadro em px antes de editar. ' : ''}Os tamanhos de cada rede (YouTube, TikTok, Instagram) você escolhe na Entrega.</div>
+    <div class="presets">${pre.map(([n, w, h]) => `<button type="button" class="btn sm" data-act="seq-preset" data-v="${w}x${h}">${n} · ${w}×${h}</button>`).join('')}</div>
+    <div class="wh"><label for="sq-w">Largura (px)<input id="sq-w" type="number" min="16" max="8192" value="${sq.w}"></label><span style="padding-bottom:8px">×</span><label for="sq-h">Altura (px)<input id="sq-h" type="number" min="16" max="8192" value="${sq.h}"></label>
+    <label for="sq-fps">Quadros/s<select id="sq-fps">${[23.976, 24, 25, 29.97, 30, 50, 59.94, 60].map((f) => `<option${Math.abs(f - sq.fps) < 0.01 ? ' selected' : ''}>${f}</option>`).join('')}</select></label></div>
+    ${it ? `<div class="note" style="margin-top:8px">Vídeo aberto: ${esc(it.name)}${vw ? ' · ' + vw + '×' + vh : ''}</div>` : ''}
+    <div class="row2"><button type="button" class="btn" data-act="dlg-close">${first ? 'Manter' : 'Cancelar'}</button><button type="button" class="btn solid" data-act="seq-save">Usar este tamanho</button></div></div>`;
+  if (!dlg.open) dlg.showModal();
+}
 function openCinemaAdd() {
   const dlg = $('#dlg');
   dlg.innerHTML = `<div class="dlg"><h2>Adicionar referência</h2><div class="muted">Cole o link de uma página do Film Grab, Flim ou Movies in Color. Só o nome e o link ficam aqui.</div>
@@ -492,7 +595,7 @@ export const actions = {
   mtool(el) { app.ui.mtool = app.ui.mtool === el.dataset.v ? null : el.dataset.v; renderMonitorBar(); renderMaskLayer(); },
   'mask-add'(el) {
     if (!st() || app.view !== 'video') { toast('Abra um vídeo primeiro.'); return; }
-    const t = Math.min(video.currentTime, app.duration - 0.2); const m = K.newMask(el.dataset.k, t, app.duration, F.newId());
+    const t = Math.min(hooks.seqTime(), app.duration - 0.2); const m = K.newMask(el.dataset.k, t, app.duration, F.newId());
     app.ui.mtool = 'seta'; addItem('Nova ' + K.maskType(m.key).name.toLowerCase(), m); renderMaskLayer();
     toast('Arraste a forma no vídeo. Em outro ponto do tempo, mexer nela cria um keyframe.');
   },
@@ -608,7 +711,27 @@ export const actions = {
   'cut-'() { moveCut(-0.5); }, 'cut+'() { moveCut(0.5); },
   mode(el) { const k = +el.dataset.k; if (k < 0) return; const { scenes } = st(); const i = curScene(); const n = P.cycleMode(scenes, i, k); commit('Enquadramento ' + P.RATIOS[k] + ' de ' + N(i) + ': ' + P.MODES[n[i].m[k]], (s) => { s.scenes = n; return s; }); },
   'sens-'() { setSens(-1); }, 'sens+'() { setSens(1); },
-  cut() { const { scenes } = st(); const i = curScene(); if (P.canSplit(scenes, i, app.ph)) commitScenes('Cortar ' + N(i) + ' em ' + fmtT(app.ph), P.split(scenes, i, app.ph)); else toast('Aqui a cena ficaria menor que 0,5 s. Mova o playhead.'); },
+  // Cortar (navalha): divide o clipe da sequência no playhead e marca o corte de cena
+  cut() {
+    const t = app.ph; const sq = edit().seq; const { scenes } = st(); const i = curScene();
+    const sel = sq && sq.clips.find((c) => c.id === app.ui.selClip && t > c.start + 0.05 && t < c.start + c.dur - 0.05);
+    const target = sel || (sq && S.topVideoAt(sq, t)); const okClip = target && t > target.start + 0.05 && t < target.start + target.dur - 0.05;
+    const okScene = P.canSplit(scenes, i, t);
+    if (!okClip && !okScene) { toast('Aqui não dá pra cortar. Mova o playhead pra dentro de um clipe.'); return; }
+    commit('Cortar em ' + fmtT(t), (s2) => { if (okScene) { s2.scenes = P.split(scenes, i, t); s2.edit = M.reconcile(s2.edit, s2.scenes); } if (okClip) { const b = S.splitClip(s2.edit.seq, target.id, t); if (b) app.ui.selClip = b.id; } return s2; });
+    hooks.renderAll();
+  },
+  't-scope'(el) { app.ui.tAll = el.dataset.v === '1'; renderInspector(); },
+  'clip-del'() { const id = app.ui.selClip; if (!id) return; app.ui.selClip = null; mutEdit('Apagar clipe', (e) => { S.removeClip(e.seq, id); S.tidy(e.seq); return e; }); },
+  'clip-split'() { actions.cut(); },
+  'tl-zoom'(el) { setZoom(zoom() * (+el.dataset.d > 0 ? 1.5 : 1 / 1.5)); },
+  'seq-open'() { openSeq(false); },
+  'seq-preset'(el) { const [w, h] = el.dataset.v.split('x'); $('#sq-w').value = w; $('#sq-h').value = h; },
+  'seq-save'() {
+    const w = clamp(Math.round(+$('#sq-w').value || 0), 16, 8192); const h = clamp(Math.round(+$('#sq-h').value || 0), 16, 8192); const fps = +$('#sq-fps').value || 30;
+    $('#dlg').close();
+    mutEdit('Sequência ' + w + '×' + h, (e) => { e.seq.w = w; e.seq.h = h; e.seq.fps = fps; return e; });
+  },
   glue() { const { scenes } = st(); const i = curScene(); if (P.canJoinNext(scenes, i)) commitScenes('Colar ' + N(i) + ' e ' + N(i + 1), P.joinNext(scenes, i)); else if (P.canJoinPrev(scenes, i)) commitScenes('Colar ' + N(i - 1) + ' e ' + N(i), P.joinPrev(scenes, i)); },
   async 'detect-exact'() {
     const s = st(); if (!s || app.exact) return;
@@ -687,6 +810,11 @@ function paramInput(ev) {
     const lab = el.closest('.box').querySelector('.mono'); if (lab) lab.textContent = (v > 0 ? '+' : '−') + Math.abs(v) + ' dB';
   } else if (act === 'text') {
     const k = el.dataset.k; mutLight('Editar texto', (e) => M.updateFx(e, id, (f) => { f.params[k] = el.value; }), 't:' + id + k); renderTimeline(); hooks.preview();
+  } else if (act === 'tstyle') {
+    const k = el.dataset.k; const v = k === 'bg' ? (el.checked ? 1 : 0) : k === 'font' || k === 'color' ? el.value : +el.value;
+    const it0 = items().find((f) => f.id === id); if (k === 'font') FT.loadFont(v);
+    mutLight('Texto: ' + k + (app.ui.tAll ? ' (todos)' : ''), (e) => { for (const f of e.fx) if (f.id === id || (app.ui.tAll && f.kind === 'tt' && f.key !== 'tarja' && !!f.cap === !!it0.cap)) f.params[k] = v; return e; }, 'ts:' + (app.ui.tAll ? 'all' : id) + k);
+    hooks.preview();
   } else if (act === 'credit') mutLight('Crédito do overlay', (e) => M.updateFx(e, id, (f) => { f.credit = { ...f.credit, creator: el.value }; }), 'cr:' + id);
   else if (act === 'idea-name') { mutLight('Nome da ideia', (e) => M.renameIdea(e, id, el.value), 'in:' + id); renderTimeline(); }
 }
@@ -728,6 +856,22 @@ export function bind() {
   const tl = $('#tl-card');
   tl.addEventListener('pointerdown', onPointerDown); window.addEventListener('pointermove', onPointerMove); window.addEventListener('pointerup', onPointerUp);
   tl.addEventListener('click', laneClick);
+  // arrastar do Material
+  document.addEventListener('dragstart', (ev) => { const r = ev.target.closest && ev.target.closest('.tree-row.file[data-id]'); if (!r) return; ev.dataTransfer.setData('text/wb-lib', r.dataset.id); ev.dataTransfer.effectAllowed = 'copy'; });
+  tl.addEventListener('dragover', (ev) => { if (![...ev.dataTransfer.types].includes('text/wb-lib')) return; ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy'; const l = ev.target.closest('.lane'); tl.querySelectorAll('.lane.drop').forEach((x) => { if (x !== l) x.classList.remove('drop'); }); if (l) l.classList.add('drop'); });
+  tl.addEventListener('dragleave', (ev) => { const l = ev.target.closest && ev.target.closest('.lane'); if (l && !l.contains(ev.relatedTarget)) l.classList.remove('drop'); });
+  tl.addEventListener('drop', dropMaterial);
+  // zoom: Ctrl + roda, controle deslizante
+  tl.addEventListener('wheel', (ev) => { if (!(ev.ctrlKey || ev.metaKey) || !st()) return; ev.preventDefault(); const lane = tl.querySelector('#timeline .lane'); const t = lane ? laneTime(lane, ev.clientX) : app.ph; setZoom(zoom() * (ev.deltaY < 0 ? 1.25 : 0.8), t); }, { passive: false });
+  tl.addEventListener('input', (ev) => { if (ev.target.id === 'tl-zoom') setZoom(+ev.target.value); });
+  // Delete apaga o clipe ou o efeito selecionado
+  document.addEventListener('keydown', (ev) => {
+    if (app.tab !== 'editar' || !st() || ev.target.closest('input,textarea,select,[contenteditable]') || $('#dlg').open) return;
+    if (ev.key === 'Delete' || ev.key === 'Backspace') {
+      if (app.ui.selClip) { ev.preventDefault(); actions['clip-del'](); } else if (app.ui.sel) { ev.preventDefault(); const id = app.ui.sel; app.ui.sel = null; mutEdit('Apagar efeito', (e) => M.removeFx(e, id)); }
+    } else if ((ev.key === 'c' || ev.key === 'C') && !ev.ctrlKey && !ev.metaKey) actions.cut();
+    else if (ev.key === '=' || ev.key === '+') setZoom(zoom() * 1.25); else if (ev.key === '-') setZoom(zoom() * 0.8);
+  });
   const insp = $('#inspector');
   insp.addEventListener('pointerdown', kfDown); window.addEventListener('pointermove', kfMove); window.addEventListener('pointerup', kfUp); insp.addEventListener('dblclick', kfDbl);
   document.addEventListener('input', (e) => {
@@ -752,7 +896,7 @@ export function renderMaskLayer() {
   const L = $('#masklayer'); if (!L) return;
   const it = selItem();
   if (!it || it.kind !== 'mk' || app.view !== 'video' || !app.ui.fxPreview) { L.innerHTML = ''; L.classList.remove('on'); return; }
-  const t = video.currentTime; const s = K.shapeAt(it, t); const inside = t >= it.a && t < it.b;
+  const t = hooks.seqTime(); const s = K.shapeAt(it, t); const inside = t >= it.a && t < it.b;
   const onKf = it.shapeKf.some((k) => Math.abs(k.t - t) < 0.02);
   L.classList.add('on');
   const l = s.x - s.w / 2; const tp = s.y - s.h / 2; const P = (x, y) => `left:${x * 100}%;top:${y * 100}%`;
@@ -764,9 +908,9 @@ export function renderMaskLayer() {
 let md = null;
 function maskDown(ev) {
   const h = ev.target.closest('[data-mh]'); if (!h) return; const it = selItem(); if (!it || it.kind !== 'mk') return;
-  const L = $('#masklayer').getBoundingClientRect(); const t = video.currentTime;
+  const L = $('#masklayer').getBoundingClientRect(); const t = hooks.seqTime();
   md = { id: it.id, h: h.dataset.mh, x0: ev.clientX, y0: ev.clientY, L, s0: K.shapeAt(it, t), t };
-  video.pause(); h.setPointerCapture && h.setPointerCapture(ev.pointerId); ev.preventDefault(); ev.stopPropagation();
+  app.player.pause(); h.setPointerCapture && h.setPointerCapture(ev.pointerId); ev.preventDefault(); ev.stopPropagation();
 }
 function maskMove(ev) {
   if (!md) return;
@@ -792,15 +936,16 @@ export function sceneCrop(t) {
 let palAt = 0;
 export function drawMon() {
   const cv = $('#cv-mon'); if (!cv) return;
-  const src = app.view === 'video' ? video : app.view === 'image' ? still : null;
-  const t = app.view === 'video' ? video.currentTime : 0;
+  const t = app.view === 'video' ? hooks.seqTime() : 0;
+  const so = app.view === 'video' ? hooks.seqSource(t) : null;
+  const src = app.view === 'video' ? (so && so.el) : app.view === 'image' ? still : null;
   const { w, h } = outSize(app.ratio, 640);
   const e = edit();
   if (!src || !e) {
     if (cv.width !== w) { cv.width = w; cv.height = h; } const g = cv.getContext('2d'); g.fillStyle = '#0c0c0e'; g.fillRect(0, 0, w, h);
     updateChips(null); return;
   }
-  const sw = app.view === 'video' ? video.videoWidth : still.naturalWidth; const sh = app.view === 'video' ? video.videoHeight : still.naturalHeight;
+  const sw = so ? so.sw : still.naturalWidth; const sh = so ? so.sh : still.naturalHeight;
   const comps = app.ui.fxPreview ? compsAt(e, M.groupAt(e, t)) : [];
   const info = app.comp.render(cv, { src, sw, sh, t, ratio: app.ratio, ox: sceneCrop(t).ox, fx: e.fx, fxOn: app.ui.fxPreview, comps, overlays: app.overlays, W: w, H: h });
   hooks.afterDraw && hooks.afterDraw(info, t);

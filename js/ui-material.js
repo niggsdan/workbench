@@ -37,7 +37,7 @@ export function renderMaterial() {
     const st = statusText(it); if (st) parts.push(st);
     if (it.id === app.activeId && app.hist) parts.push(app.hist.current.scenes.length + ' cenas');
     const busy = it.status === 'convertendo' || it.status === 'baixando';
-    return `<div class="tree-row file${it.id === app.activeId ? ' on' : ''}" style="padding-left:34px;padding-right:4px" data-act="${it.kind === 'other' ? 'noop' : 'open'}" data-id="${it.id}" title="${esc(it.path + (it.info ? '\n' + it.info : ''))}">
+    return `<div class="tree-row file${it.id === app.activeId ? ' on' : ''}" style="padding-left:34px;padding-right:4px" data-act="${it.kind === 'other' ? 'noop' : 'open'}" data-id="${it.id}" ${it.kind === 'other' ? '' : 'draggable="true" '}title="${esc(it.path + (it.info ? '\n' + it.info : ''))}">
       <span class="sq" style="background:${it.kind === 'video' ? '#7b8088' : it.kind === 'audio' ? '#9aa0a8' : it.kind === 'image' ? '#b6bbc2' : '#565c64'}"></span>
       <span class="nm ell">${esc(it.name)}</span><span class="meta${it.status === 'erro' ? ' err' : ''}">${esc(parts.join(' · '))}</span>
       <button type="button" class="dl" data-act="download" data-id="${it.id}" title="Baixar o original" aria-label="Baixar ${esc(it.name)}">⬇</button>

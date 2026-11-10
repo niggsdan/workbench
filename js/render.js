@@ -1,4 +1,5 @@
 // Compositor: desenha um quadro final (reenquadre + efeitos + cor + textura + overlay + texto) num canvas.
+import { tstyle, loadFont } from './fonts.js';
 // Serve a prévia (Editar e Cor) e o render da Entrega, com o mesmo código.
 
 import { fxState, textureState, BLENDS } from './fx.js';
@@ -456,11 +457,13 @@ export class Compositor {
       g.fillStyle = '#fff'; g.font = '800 ' + fs + 'px ' + family; g.fillText(String(it.params.text || ''), W * 0.045, y + bh * (it.params.sub ? 0.34 : 0.5), W * 0.9);
       if (it.params.sub) { g.fillStyle = '#e5e5e5'; g.font = '600 ' + Math.round(fs * 0.7) + 'px ' + family; g.fillText(String(it.params.sub), W * 0.045, y + bh * 0.72, W * 0.9); }
     } else {
-      g.font = '800 ' + fs + 'px ' + family;
-      const txt = String(it.params.text || ''); const w = Math.min(W * 0.92, g.measureText(txt).width + fs);
-      g.fillStyle = 'rgba(0,0,0,.65)'; const y = H * 0.84;
-      g.beginPath(); g.roundRect ? g.roundRect(W / 2 - w / 2, y - fs * 0.8, w, fs * 1.6, fs * 0.3) : g.rect(W / 2 - w / 2, y - fs * 0.8, w, fs * 1.6); g.fill();
-      g.fillStyle = '#fff'; g.fillText(txt, W / 2, y, W * 0.9);
+      const ts = tstyle(it.params); const fz = Math.round(Math.min(W, H) * ts.size / 100);
+      loadFont(ts.font, () => { this.fontTick = (this.fontTick || 0) + 1; });
+      g.font = ts.weight + ' ' + fz + "px '" + ts.font + "', system-ui, sans-serif";
+      const txt = String(it.params.text || ''); const w = Math.min(W * 0.92, g.measureText(txt).width + fz); const y = H * ts.y / 100;
+      if (+ts.bg) { g.fillStyle = 'rgba(0,0,0,.65)'; g.beginPath(); g.roundRect ? g.roundRect(W / 2 - w / 2, y - fz * 0.8, w, fz * 1.6, fz * 0.3) : g.rect(W / 2 - w / 2, y - fz * 0.8, w, fz * 1.6); g.fill(); }
+      if (+ts.stroke) { g.lineJoin = 'round'; g.lineWidth = fz * ts.stroke / 100; g.strokeStyle = '#000'; g.strokeText(txt, W / 2, y, W * 0.92); }
+      g.fillStyle = ts.color; g.fillText(txt, W / 2, y, W * 0.92);
     }
     g.restore();
   }

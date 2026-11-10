@@ -60,7 +60,7 @@ function renderViewer() {
     <div class="seg">${[['atual', 'Atual'], ['ref', refLabel], ['split', 'Dividir']].map(([k, l]) => `<button type="button" data-act="cv" data-v="${k}" aria-pressed="${app.ui.cv === k}">${l}</button>`).join('')}</div></div>
     <div class="v-stage">${app.view ? `<div class="v-wrap" id="cv-wrap"><canvas id="cv-cor" aria-label="Visualizador de cor"></canvas>${app.ui.cv === 'split' ? `<span class="tag a">${refLabel}</span><span class="tag b">Atual</span><span class="vline" id="vline" style="left:${app.ui.split * 100}%"></span>` : `<span class="tag b">${app.ui.cv === 'ref' ? refLabel : 'Atual'}</span>`}</div>` : '<div class="muted">Abra um vídeo na aba Editar pra corrigir a cor.</div>'}</div>
     <div class="v-foot"><span class="mono" style="color:var(--txt)" id="c-tc">${fmtT(app.ph)} <span class="muted">/ ${fmtT(app.duration)}</span></span>
-      <span style="display:flex;gap:6px"><button type="button" class="btn sq sm" data-act="step-back" aria-label="Voltar">◀</button><button type="button" class="btn sm solid" data-act="play" aria-label="Tocar ou pausar">${video.paused ? 'Tocar' : 'Pausar'}</button><button type="button" class="btn sq sm" data-act="step-fwd" aria-label="Avançar">▶</button></span>
+      <span style="display:flex;gap:6px"><button type="button" class="btn sq sm" data-act="step-back" aria-label="Voltar">◀</button><button type="button" class="btn sm solid" data-act="play" aria-label="Tocar ou pausar">${!app.player.playing ? 'Tocar' : 'Pausar'}</button><button type="button" class="btn sq sm" data-act="step-fwd" aria-label="Avançar">▶</button></span>
       <span>Prévia em meia resolução, o render final é em cheia</span></div>`;
 }
 function renderScopes() {
@@ -189,17 +189,17 @@ function renderInsp() {
 let scopeAt = 0; let palAt = 0; const alt = document.createElement('canvas');
 export function drawCor() {
   const cv = $('#cv-cor'); if (!cv || !app.view) return;
-  const e = edit(); const src = app.view === 'video' ? video : app.view === 'image' ? still : null; if (!src || !e) return;
-  const t = app.view === 'video' ? video.currentTime : 0;
+  const t = app.view === 'video' ? hooks.seqTime() : 0; const so = app.view === 'video' ? hooks.seqSource(t) : null;
+  const e = edit(); const src = app.view === 'video' ? (so && so.el) : app.view === 'image' ? still : null; if (!src || !e) return;
   const { w, h } = outSize(app.ratio, 640);
-  const sw = app.view === 'video' ? video.videoWidth : still.naturalWidth; const sh = app.view === 'video' ? video.videoHeight : still.naturalHeight;
+  const sw = so ? so.sw : still.naturalWidth; const sh = so ? so.sh : still.naturalHeight;
   const ox = hooks.sceneCrop(t).ox; const base = { src, sw, sh, t, ratio: app.ratio, ox, fx: e.fx, fxOn: false, overlays: app.overlays, W: w, H: h };
   const gIdx = M.groupAt(e, t);
   const comps = app.ui.editing === 'general' ? [e.general.on ? compiled(e.general.grade) : null] : compsAt(e, gIdx);
   if (app.ui.editing === 'general' && e.general.on) comps.unshift(compiled(e.grades[gIdx]));
   app.comp.render(cv, { ...base, comps });
   const now = performance.now();
-  if (!video.paused ? now - scopeAt > 120 : true) { scopeAt = now; drawScopes(cv); }
+  if (app.player.playing ? now - scopeAt > 120 : true) { scopeAt = now; drawScopes(cv); }
   if (now - palAt > 700) { palAt = now; app.palCor = G.extractPalette(sampleCanvas(cv, 64).data); const p = $('#c-pal'); if (p) renderPal(); }
   if (app.ui.cv !== 'atual') {
     const ref = app.ui.stillSel ? stillImg(e.stills.find((s) => s.id === app.ui.stillSel) || {}) : app.refImg;

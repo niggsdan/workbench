@@ -13,6 +13,52 @@ import * as Ed from './ui-editar.js';
 import * as Cor from './ui-cor.js';
 import * as Ent from './ui-entrega.js';
 import * as Lay from './layout.js';
+import * as S from './seq.js';
+
+// ---------- sequência: player multitrilha ----------
+const pool = new Map(); const pooling = new Set();
+function elOf(c) {
+  if (c.lib === app.activeId && app.view !== 'image') return video;
+  const el = pool.get(c.lib); if (el) return el;
+  if (pooling.has(c.lib)) return null; pooling.add(c.lib);
+  const it = app.lib.get(c.lib); if (!it) return null;
+  if (it.kind === 'image') Mat.fileOf(it).then((f) => { const im = new Image(); im.onload = () => { pool.set(c.lib, im); app.dirty = true; }; im.src = URL.createObjectURL(f); }).catch(() => toast('Não consegui abrir ' + it.name + '.'));
+  else Mat.prepareItem(it).then((blob) => { const m = document.createElement(it.kind === 'audio' ? 'audio' : 'video'); m.playsInline = true; m.preload = 'auto'; m.src = URL.createObjectURL(blob); m.addEventListener('seeked', () => { app.dirty = true; }); m.addEventListener('loadeddata', () => { app.dirty = true; }); pool.set(c.lib, m); app.dirty = true; }).catch(() => toast('Não consegui preparar ' + it.name + '.'));
+  return null;
+}
+// sem sequência salva (áudio solto, análise em curso) usa uma virtual com o arquivo aberto
+function curSeq() {
+  const e = edit(); if (e && e.seq) return e.seq;
+  if (!app.view || app.view === 'image' || !app.activeId) return null;
+  const d = app.srcDur || app.duration || 0; if (!d) return null;
+  return { w: 1080, h: 1920, fps: 30, tracks: [{ id: 'V1', kind: 'video' }, { id: 'A1', kind: 'audio' }], clips: [{ id: 'c0', track: app.view === 'audio' ? 'A1' : 'V1', lib: app.activeId, name: app.name, kind: app.view, start: 0, in: 0, dur: d, src: d }] };
+}
+const player = new S.Player({
+  primary: video, getSeq: curSeq, getEl: elOf,
+  rate: () => { const e = edit(); if (!e || !app.ui.fxPreview || app.view !== 'video') return 1; return clamp(fxState(e.fx, player.t).rate, 0.25, 4); },
+  onState: (on) => { if (on) { Ed.renderMonitorBar(); return; } app.ph = P.r1(player.t); Ed.renderMonitorBar(); if (app.tab === 'editar') { Ed.renderDetector(); Ed.renderTimeline(); } else if (app.tab === 'cor') Cor.render(); else Ent.render(); app.dirty = true; }
+});
+player.pool = pool;
+app.player = player;
+hooks.seqSource = (t) => player.source(t);
+hooks.seqTime = () => player.t;
+hooks.curSeq = curSeq;
+hooks.openItem = (id) => Mat.openItem(id);
+hooks.mediaDur = async (it) => {
+  if (it.duration) return it.duration;
+  const blob = await Mat.prepareItem(it); const m = document.createElement(it.kind === 'audio' ? 'audio' : 'video'); m.preload = 'metadata'; m.src = URL.createObjectURL(blob);
+  await new Promise((r, j) => { m.onloadedmetadata = r; m.onerror = () => j(new Error('mídia')); });
+  it.duration = Number.isFinite(m.duration) ? m.duration : 5; if (!pool.has(it.id) && it.id !== app.activeId) { m.preload = 'auto'; m.playsInline = true; m.addEventListener('seeked', () => { app.dirty = true; }); pool.set(it.id, m); pooling.add(it.id); }
+  return it.duration;
+};
+// sequência criada ao abrir o primeiro vídeo (sem passo no histórico)
+function ensureSeq(duration) {
+  const cur = app.hist && app.hist.current; if (!cur || cur.edit.seq) return false;
+  const vw = video.videoWidth || 1920; const vh = video.videoHeight || 1080;
+  const sq = S.newSeq(vw, vh, app.fps || 30);
+  S.addClip(sq, { lib: app.activeId, name: app.name, kind: 'video', dur: duration, start: 0, src: duration });
+  cur.edit.seq = sq; return true;
+}
 
 const say = (t) => { const a = $('#analysis'); if (a) { a.textContent = t; a.title = t; } };
 hooks.say = say;
@@ -33,7 +79,7 @@ function renderHeader() {
 hooks.renderHeader = renderHeader;
 
 function go(tab) {
-  app.tab = tab;
+  app.tab = tab; document.body.classList.toggle('on-entrega', tab === 'entrega');
   for (const v of ['editar', 'cor', 'entrega']) $('#view-' + v).hidden = v !== tab;
   if (tab === 'entrega') app.ratio = app.dest[app.focusDest].ratio;
   Lay.renderPanelMenu(); renderAll(); app.dirty = true; window.scrollTo({ top: 0 });
@@ -41,6 +87,8 @@ function go(tab) {
 hooks.go = go;
 
 function renderAll() {
+  const sq = edit() && edit().seq;
+  if (sq) { app.duration = Math.max(S.seqEnd(sq), 0.1); if (app.tab !== 'entrega') { const q = sq.w / sq.h; app.ratio = P.RATIOS.find((r) => { const [a, b] = r.split(':'); return Math.abs(a / b - q) < 0.01; }) || sq.w + ':' + sq.h; } }
   renderHeader();
   if (app.tab === 'editar') { Mat.renderMaterial(); Ed.render(); }
   else if (app.tab === 'cor') Cor.render();
@@ -63,7 +111,7 @@ function setView(v) {
 function seek(t) {
   const tt = clamp(t, 0, Math.max(0, app.duration - 0.05));
   app.ph = P.r1(tt);
-  if (app.view === 'video' || app.view === 'audio') video.currentTime = tt;
+  if (app.view === 'video' || app.view === 'audio') player.seek(tt);
   lastT = tt; syncOverlays(tt, false);
   if (app.tab === 'editar') { Ed.renderDetector(); Ed.renderTimeline(); Ed.timecode(); if (app.ui.itab === 'clipe') Ed.renderInspector(); }
   else if (app.tab === 'cor') Cor.render(); else Ent.render();
@@ -75,7 +123,7 @@ const ac = () => { if (!audioCtx) audioCtx = new AudioContext(); if (audioCtx.st
 hooks.previewSound = (key, vol) => { const c = ac(); playSound(c, c.destination, key, c.currentTime + 0.02, vol, 2); };
 function togglePlay() {
   if (!app.view || app.view === 'image') return;
-  if (video.paused) { ac(); lastT = video.currentTime; video.play(); } else video.pause();
+  if (player.paused) { ac(); lastT = player.t; player.play(); } else player.pause();
 }
 hooks.togglePlay = togglePlay;
 
@@ -87,7 +135,7 @@ hooks.sceneCrop = (t, ratio = app.ratio, scenes = st() && st().scenes) => {
 
 function resetEditor() {
   if (app.abort) { app.abort.abort(); app.abort = null; }
-  video.pause();
+  player.pause(); video.pause(); app.srcDur = 0;
   Object.assign(app, { duration: 0, cands: [], thumbs: [], hist: null, ph: 0, idx: -1, busy: false, error: '', notice: '' });
   app.ui.sel = null; app.ui.node = null;
 }
@@ -120,12 +168,13 @@ async function loadVideo(play, it) {
     await new Promise((r) => { if (video.readyState >= 1) r(); else video.addEventListener('loadedmetadata', r, { once: true }); });
     app.duration = video.duration; app.dirty = true;
     const { duration, series, thumbs } = await sampleVideo(app.url, { signal: ctl.signal, onProgress: (p) => say('Analisando ' + Math.round(p * 100) + '%') });
-    app.duration = duration; app.thumbs = thumbs || [];
+    app.duration = duration; app.srcDur = duration; app.thumbs = thumbs || [];
     if (pending && Math.abs(duration - pending.video.duration) <= 0.5) {
       app.cands = pending.cands.length ? pending.cands : candidates(series);
       app.ratio = pending.ratio;
       app.hist = new History({ scenes: pending.scenes, sens: pending.sens, edit: pending.edit }, 'Projeto aberto');
       if (pending.edit.briefing.name) app.projectName = pending.edit.briefing.name;
+      ensureSeq(duration);
       say('Projeto aberto: ' + pending.scenes.length + ' cenas.'); toast('Projeto retomado com ' + pending.edit.fx.length + ' itens e ' + M.groupCount(pending.edit) + ' grupos de cor.');
     } else {
       app.cands = candidates(series);
@@ -134,7 +183,7 @@ async function loadVideo(play, it) {
       { const e0 = app.hist.items[0].state.edit; const pre = app.pre; for (const k of ['cinema', 'briefing', 'platform', 'container', 'refPal']) e0[k] = JSON.parse(JSON.stringify(pre[k])); }
       const gb = hooks.autoGroups(false) || [];
       app.hist.items[0].state.edit = M.setGroups(app.hist.items[0].state.edit, gb);
-      const plat = PLATFORMS.find((p) => p.key === app.hist.current.edit.platform); app.ratio = plat.ratio;
+      ensureSeq(duration); app.askSeq = true;
       say((pending ? 'Duração diferente do projeto, analisei do zero. ' : '') + scenes.length + ' cenas, ' + (gb.length + 1) + ' grupos de cor.');
     }
   } catch (e) {
@@ -143,6 +192,7 @@ async function loadVideo(play, it) {
   } finally {
     if (app.abort === ctl) { app.busy = false; app.abort = null; }
     renderAll();
+    if (app.askSeq) { app.askSeq = false; Ed.openSeq(true); }
   }
 }
 async function loadAudio(play, it) {
@@ -150,7 +200,7 @@ async function loadAudio(play, it) {
   app.url = URL.createObjectURL(play); video.src = app.url; app.name = it.name; $('#audio-name').textContent = it.name;
   setView('audio'); app.notice = 'Áudio aberto. O detector de cenas e a cor são pra vídeo.';
   await new Promise((r) => { if (video.readyState >= 1) r(); else video.addEventListener('loadedmetadata', r, { once: true }); });
-  app.duration = Number.isFinite(video.duration) ? video.duration : 0; renderAll();
+  app.duration = app.srcDur = Number.isFinite(video.duration) ? video.duration : 0; renderAll();
 }
 async function loadStill(file, it) {
   resetEditor(); if (app.url) URL.revokeObjectURL(app.url);
@@ -188,19 +238,18 @@ let lastT = 0; let lastScene = -1;
 function tick() {
   requestAnimationFrame(tick);
   if (!app.view) return;
-  const playing = (app.view === 'video' || app.view === 'audio') && !video.paused;
+  const playing = (app.view === 'video' || app.view === 'audio') && player.playing;
   if (playing) {
-    const t = video.currentTime; app.ph = P.r1(t);
+    const t = player.step(); app.ph = P.r1(t);
     const e = edit();
     if (e && app.ui.fxPreview && app.view === 'video') {
       const f = fxState(e.fx, t);
-      const rate = clamp(f.rate, 0.25, 4); if (Math.abs(video.playbackRate - rate) > 0.01) video.playbackRate = rate;
-      if (f.skipTo !== null && f.skipTo > t + 0.05) video.currentTime = f.skipTo;
+      if (f.skipTo !== null && f.skipTo > t + 0.05) player.jump(f.skipTo);
       for (const it of e.fx) {
         if (!it.sfx) continue; const at = it.kind === 'sx' ? it.a : it.a + it.sfx.off;
         if (at > lastT && at <= t + 0.03) { const c = ac(); playSound(c, c.destination, it.sfx.key, c.currentTime, it.sfx.vol, Math.min(8, it.b - it.a)); }
       }
-    } else if (video.playbackRate !== 1) video.playbackRate = 1;
+    }
     lastT = t; syncOverlays(t, true);
     Ed.syncPlayhead(); Ed.timecode();
     const s = st(); if (s) { const i = P.sceneAt(s.scenes, app.ph); if (i !== lastScene) { lastScene = i; if (app.tab === 'editar') { Ed.renderDetector(); Ed.renderTimeline(); } } }
@@ -214,7 +263,7 @@ function tick() {
 
 // ---------- projeto ----------
 const slug = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'projeto';
-function projectText() { const s = st(); return P.serializeProject({ video: { name: app.name, size: app.size, duration: app.duration }, sens: s.sens, ratio: app.ratio, scenes: s.scenes, cands: app.cands, edit: s.edit }); }
+function projectText() { const s = st(); return P.serializeProject({ video: { name: app.name, size: app.size, duration: app.srcDur || app.duration }, sens: s.sens, ratio: app.ratio, scenes: s.scenes, cands: app.cands, edit: s.edit }); }
 function saveProject() {
   if (!st()) { toast('Abra um vídeo antes de salvar o projeto.'); return; }
   const a = $('#dl'); const name = 'workbench_' + slug(app.projectName || app.name.replace(/\.[^.]+$/, '')) + '_' + new Date().toISOString().slice(0, 10) + '.json';
@@ -298,10 +347,8 @@ $('#proj').addEventListener('change', (e) => { const f = e.target.files[0]; e.ta
 Mat.bindInputs(); Ed.bind(); Cor.bind(); Ent.bind(); Lay.bindLayout();
 
 video.addEventListener('seeked', () => { app.dirty = true; });
+window.addEventListener('wb-font', () => { app.dirty = true; });
 video.addEventListener('loadeddata', () => { app.dirty = true; });
-video.addEventListener('play', () => { Ed.renderMonitorBar(); });
-video.addEventListener('pause', () => { video.playbackRate = 1; app.ph = P.r1(video.currentTime); Ed.renderMonitorBar(); if (app.tab === 'editar') { Ed.renderDetector(); Ed.renderTimeline(); } else if (app.tab === 'cor') Cor.render(); else Ent.render(); app.dirty = true; });
-video.addEventListener('ended', () => { video.pause(); });
 
 // arrastar e soltar
 let dragDepth = 0;
@@ -320,7 +367,7 @@ new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', $
 
 // pra testes e depuração
 try { sessionStorage.removeItem('wb.refetch'); } catch (e) { /* ok */ }
-window.__wb = { app, addEntries: Mat.addEntries, openItem: Mat.openItem, go, seek, st, edit, mutEdit };
+window.__wb = { app, player, S, addEntries: Mat.addEntries, openItem: Mat.openItem, go, seek, st, edit, mutEdit };
 
 go('editar');
 renderResume();

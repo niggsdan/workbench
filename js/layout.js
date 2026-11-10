@@ -2,15 +2,15 @@
 import { app, $, $$ } from './store.js';
 
 const DEF = {
-  editar: { mat: true, fx: true, pal: true, insp: true, tl: true, leftW: 310, rightW: 310, bottomH: 30 },
+  editar: { mat: true, fx: true, pal: true, insp: true, tl: true, det: true, afx: false, leftW: 310, rightW: 310, bottomH: 40 },
   cor: { left: true, scopes: true, insp: true, bottom: true, leftW: 300, rightW: 340, bottomH: 30 }
 };
 let L = JSON.parse(JSON.stringify(DEF));
-try { const s = JSON.parse(localStorage.getItem('wb.layout') || 'null'); if (s) for (const v of ['editar', 'cor']) Object.assign(L[v], s[v] || {}); } catch (e) { /* padrão */ }
-const save = () => { try { localStorage.setItem('wb.layout', JSON.stringify(L)); } catch (e) { /* sem espaço */ } };
+try { const s = JSON.parse(localStorage.getItem('wb.layout') || 'null'); if (s) { for (const v of ['editar', 'cor']) Object.assign(L[v], s[v] || {}); if (!s.v2) L.editar.bottomH = Math.max(L.editar.bottomH, 40); } } catch (e) { /* padrão */ }
+const save = () => { try { localStorage.setItem('wb.layout', JSON.stringify({ ...L, v2: 1 })); } catch (e) { /* sem espaço */ } };
 
 export const PANELS = {
-  editar: [['mat', 'Material'], ['fx', 'Efeitos'], ['pal', 'Paleta'], ['insp', 'Ajustes'], ['tl', 'Timeline']],
+  editar: [['mat', 'Material'], ['fx', 'Efeitos'], ['pal', 'Paleta'], ['insp', 'Ajustes'], ['tl', 'Timeline'], ['det', 'Cenas (detector)'], ['afx', 'Auto-FX']],
   cor: [['left', 'Álbum e paleta'], ['scopes', 'Scopes'], ['insp', 'Ajustes'], ['bottom', 'Nós e grupos']]
 };
 
@@ -20,6 +20,7 @@ export function applyLayout() {
   ve.style.gridTemplateColumns = (left ? e.leftW : 52) + 'px minmax(0,1fr) ' + (e.insp ? e.rightW + 'px' : '0px');
   ve.style.gridTemplateRows = 'minmax(0,1fr) ' + (e.tl ? e.bottomH + 'vh' : 'auto');
   ve.classList.toggle('no-left', !left); ve.classList.toggle('no-insp', !e.insp); ve.classList.toggle('no-tl', !e.tl); ve.classList.toggle('no-pal', !e.pal);
+  $('#detector').hidden = e.det === false; $('#autofx').hidden = !e.afx;
   $('#material').hidden = !e.mat; $('#efeitos').hidden = !e.fx; $('#pal').hidden = !e.pal;
   ve.querySelector('.stack').hidden = !left;
   const c = L.cor; const vc = $('#view-cor');
