@@ -319,6 +319,7 @@ window.addEventListener('beforeunload', () => autosave());
 new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', $('.top').offsetHeight + 'px')).observe($('.top'));
 
 // pra testes e depuração
+try { sessionStorage.removeItem('wb.refetch'); } catch (e) { /* ok */ }
 window.__wb = { app, addEntries: Mat.addEntries, openItem: Mat.openItem, go, seek, st, edit, mutEdit };
 
 go('editar');

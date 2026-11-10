@@ -154,6 +154,18 @@
 <div class="toast" id="toast" role="status" hidden></div>
 <div class="drop" id="drop" hidden><div>Solte aqui pra adicionar ao Material</div></div>
 
+<script>
+// Se o navegador misturar arquivos velhos do cache com os novos (logo depois de uma atualização), o app não abre.
+// Aí baixa tudo de novo, sem cache, e recarrega uma vez.
+setTimeout(async () => {
+  if (window.__wb || sessionStorage.getItem('wb.refetch')) return;
+  sessionStorage.setItem('wb.refetch', '1');
+  const mods = ["app", "config", "convert", "detect", "drive", "export", "eyecandy", "filmgrab", "fx", "grade", "history", "layout", "library", "masks", "media", "model", "project", "raw", "render", "sampler", "sound", "sources", "store", "transcribe", "transcribe-worker", "transcript", "ui-cor", "ui-editar", "ui-entrega", "ui-material"];
+  await Promise.all(mods.map((n) => fetch('js/' + n + '.js', { cache: 'reload' }).catch(() => {})));
+  await fetch('css/app.css', { cache: 'reload' }).catch(() => {});
+  location.reload();
+}, 5000);
+</script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
