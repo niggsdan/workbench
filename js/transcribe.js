@@ -42,7 +42,7 @@ export async function transcribe(blob, name, opts) {
     const stop = () => { w.onmessage = null; };
     if (opts.signal) opts.signal.addEventListener('abort', () => { stop(); w.terminate(); worker = null; reject(new DOMException('Transcrição cancelada', 'AbortError')); }, { once: true });
     w.onmessage = ({ data }) => {
-      if (data.type === 'load') say('Baixando o modelo ' + m.label.toLowerCase() + ' (só na primeira vez)…', data.p * 0.3);
+      if (data.type === 'load') say('Baixando o modelo (' + m.label.toLowerCase() + ', só na primeira vez)…', data.p * 0.3);
       else if (data.type === 'ready') say('Transcrevendo…', 0.3, { device: data.device });
       else if (data.type === 'part') {
         segs.push(...mergeChunks(data.chunks, data.offset, opts.duration || Infinity));
