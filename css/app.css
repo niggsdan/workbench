@@ -345,3 +345,15 @@ dialog::backdrop{background:rgba(10,10,12,.62)}
 .drop>div{padding:28px 40px;border:2px dashed var(--soft);border-radius:18px;font-family:'Syne',sans-serif;font-weight:800;font-size:20px}
 .clip.a.sel{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--txt);z-index:2}
 .dlg .seg{flex-wrap:wrap}
+
+.lib-row{position:relative}
+div.lib-row{display:flex;align-items:center;gap:8px}
+div.lib-row.on{background:var(--card);box-shadow:inset 0 0 0 1px var(--btn-line)}
+.lib-row button.t{flex:1;min-width:0;border:0;background:transparent;color:var(--txt);text-align:left;padding:0}
+.lib-row .eye{flex:none;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--muted);text-decoration:none;font-size:13px}
+.lib-row .eye:hover{background:var(--btn);color:var(--txt)}
+.lib-row.find{border:1px dashed var(--btn-line);margin-bottom:6px}
+.cats{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.cats button{border:1px solid var(--line);background:transparent;color:var(--muted);font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px}
+.cats button[aria-pressed="true"]{background:var(--txt);color:#1b1c1e;border-color:var(--txt)}
+a.opt{text-decoration:none}

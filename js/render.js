@@ -23,7 +23,147 @@ export class Compositor {
       g.putImageData(im, 0, 0); this.tiles.push(c);
     }
     this.snap = mk(); this.snapId = null;
-    this.small = mk(); this.small2 = mk(); this.scratch = mk();
+    this.small = mk(); this.small2 = mk(); this.scratch = mk(); this.scratch2 = mk();
+    this.ring = []; this.ringT = null; this.hold = mk(); this.holdN = 0; this.mosh = mk(); this.moshOk = false; this.stut = { id: null, frames: [], n: 0 };
+    this.fishKey = ''; this.fishMap = null;
+  }
+
+  // ---------- auxiliares dos efeitos do Eyecandy ----------
+  copyTo(c, canvas, W, H) { if (c.width !== W) c.width = W; if (c.height !== H) c.height = H; const g = ctx2(c); g.globalAlpha = 1; g.globalCompositeOperation = 'copy'; g.drawImage(canvas, 0, 0); g.globalCompositeOperation = 'source-over'; return c; }
+  ringAt(k) { const i = this.ring.length - 1 - k; return i >= 0 ? this.ring[Math.max(0, i)] : null; }
+  pushRing(canvas, W, H, t) {
+    if (this.ringT !== null && Math.abs(t - this.ringT) < 1e-4) return;
+    this.ringT = t;
+    let c = this.ring.length >= 32 ? this.ring.shift() : mk(W, H);
+    this.ring.push(this.copyTo(c, canvas, W, H));
+  }
+  filterPass(g, canvas, W, H, f, alpha = 1) {
+    if (alpha <= 0.01) return;
+    this.copyTo(this.scratch, canvas, W, H);
+    g.save(); g.filter = f; g.globalAlpha = Math.min(1, alpha); g.drawImage(this.scratch, 0, 0); g.restore();
+  }
+  blurMasked(g, canvas, W, H, px, mask) {
+    this.copyTo(this.scratch, canvas, W, H);
+    const b = this.scratch2; b.width = W; b.height = H; const bg = ctx2(b);
+    bg.filter = 'blur(' + px + 'px)'; bg.drawImage(this.scratch, 0, 0); bg.filter = 'none';
+    if (mask) { bg.globalCompositeOperation = 'destination-out'; bg.fillStyle = mask(bg); bg.fillRect(0, 0, W, H); bg.globalCompositeOperation = 'source-over'; }
+    g.drawImage(b, 0, 0);
+  }
+  looksGeo(g, canvas, W, H, looks) {
+    for (const L of looks) {
+      const a = L.e; const P = L.params; if (a <= 0.01) continue;
+      if (L.key === 'kaleido') {
+        this.copyTo(this.scratch, canvas, W, H); const n = Math.round(P.n); const R = Math.hypot(W, H);
+        const spin = (P.spin / 100) * L.dt * 1.2;
+        g.save(); g.globalAlpha = a; g.translate(W / 2, H / 2);
+        for (let i = 0; i < n; i++) {
+          g.save(); g.rotate(spin + (i * 2 * Math.PI) / n); if (i % 2) g.scale(1, -1);
+          g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, R, -Math.PI / n - 0.01, Math.PI / n + 0.01); g.closePath(); g.clip();
+          g.drawImage(this.scratch, -W / 2, -H / 2); g.restore();
+        }
+        g.restore();
+      } else if (L.key === 'dup') {
+        this.copyTo(this.scratch, canvas, W, H); const n = Math.round(P.n);
+        g.save(); g.globalAlpha = a; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) g.drawImage(this.scratch, (x * W) / n, (y * H) / n, W / n, H / n); g.restore();
+      } else if (L.key === 'pip') {
+        const src = this.ringAt(Math.round(P.delay)) || canvas; const s = P.size / 100; const w = W * s; const h = H * s; const m = Math.min(W, H) * 0.04;
+        const c = Math.round(P.pos); const x = c % 2 ? W - w - m : m; const y = c > 1 ? H - h - m : m;
+        g.save(); g.globalAlpha = a; g.fillStyle = '#fff'; g.fillRect(x - 2, y - 2, w + 4, h + 4); g.drawImage(src, x, y, w, h); g.restore();
+      } else if (L.key === 'pixel') {
+        const sz = Math.max(2, P.size * (W / 640) * a); const sw = Math.max(2, Math.round(W / sz)); const sh = Math.max(2, Math.round(H / sz));
+        this.small.width = sw; this.small.height = sh; const sg = ctx2(this.small); sg.imageSmoothingEnabled = true; sg.drawImage(canvas, 0, 0, sw, sh);
+        g.save(); g.imageSmoothingEnabled = false; g.drawImage(this.small, 0, 0, W, H); g.restore();
+      } else if (L.key === 'fisheye') this.fisheye(g, canvas, W, H, (P.amt / 100) * a);
+      else if (L.key === 'tiltshift') {
+        const cy = H * P.pos / 100; const band = H * 0.12;
+        this.blurMasked(g, canvas, W, H, P.blur * (W / 640) * a, (bg) => { const gr = bg.createLinearGradient(0, 0, 0, H); const f = (y) => Math.min(1, Math.max(0, y / H));
+          gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(f(cy - band * 2.2), 'rgba(0,0,0,0)'); gr.addColorStop(f(cy - band * 0.6), 'rgba(0,0,0,1)'); gr.addColorStop(f(cy + band * 0.6), 'rgba(0,0,0,1)'); gr.addColorStop(f(cy + band * 2.2), 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); return gr; });
+        this.filterPass(g, canvas, W, H, 'saturate(' + P.sat + '%) contrast(1.06)', a);
+      } else if (L.key === 'shallow') {
+        const r = Math.min(W, H) * P.size / 100;
+        this.blurMasked(g, canvas, W, H, P.blur * (W / 640) * a, (bg) => { const gr = bg.createRadialGradient(W / 2, H * 0.45, r * 0.55, W / 2, H * 0.45, r * 1.25); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); return gr; });
+      } else if (L.key === 'focal') this.blurMasked(g, canvas, W, H, P.blur * (W / 640) * a, null);
+    }
+  }
+  fisheye(g, canvas, W, H, k) {
+    if (k < 0.01) return;
+    const key = W + 'x' + H + ':' + Math.round(k * 50);
+    if (this.fishKey !== key) {
+      const map = new Int32Array(W * H); const cx = W / 2; const cy = H / 2; const R = Math.hypot(cx, cy); const kk = Math.round(k * 50) / 50;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const dx = (x - cx) / R; const dy = (y - cy) / R; const r = Math.hypot(dx, dy);
+        const f = r ? (1 - kk) + kk * Math.pow(r, 1.6) / r * r : 1; const sx = Math.round(cx + dx * f * R); const sy = Math.round(cy + dy * f * R);
+        map[y * W + x] = sx >= 0 && sx < W && sy >= 0 && sy < H ? sy * W + sx : -1;
+      }
+      this.fishKey = key; this.fishMap = map;
+    }
+    const src = g.getImageData(0, 0, W, H); const out = g.createImageData(W, H); const s = src.data; const o = out.data; const m = this.fishMap;
+    for (let i = 0; i < m.length; i++) { const j = m[i]; const p = i * 4; if (j < 0) { o[p + 3] = 255; continue; } const q = j * 4; o[p] = s[q]; o[p + 1] = s[q + 1]; o[p + 2] = s[q + 2]; o[p + 3] = 255; }
+    g.putImageData(out, 0, 0);
+  }
+  looksTime(g, canvas, W, H, looks) {
+    for (const L of looks) {
+      const a = L.e; const P = L.params;
+      if (L.key === 'mblur') { const p = this.ringAt(1); if (p) { g.save(); g.globalAlpha = Math.min(0.92, (P.amt / 100) * a); g.drawImage(p, 0, 0); g.restore(); } }
+      else if (L.key === 'echo') { const n = Math.round(P.n); g.save(); g.globalCompositeOperation = 'screen'; for (let k = n; k >= 1; k--) { const p = this.ringAt(k * 2); if (!p) continue; g.globalAlpha = (P.amt / 100) * a * (1 - k / (n + 1)) * 0.7; g.drawImage(p, 0, 0); } g.restore(); }
+      else if (L.key === 'double') { const p = this.ringAt(Math.round(P.delay)); if (p) { g.save(); g.globalCompositeOperation = 'screen'; g.globalAlpha = (P.mix / 100) * a; g.drawImage(p, 0, 0); g.restore(); } }
+      else if (L.key === 'step') { const h = Math.round(P.hold); if (this.holdN % h === 0 || this.hold.width !== W) this.copyTo(this.hold, canvas, W, H); this.holdN++; g.drawImage(this.hold, 0, 0); }
+      else if (L.key === 'stutter') {
+        const n = Math.round(P.len); const s = this.stut;
+        if (s.id !== L.id) { s.id = L.id; s.frames = []; s.n = 0; }
+        if (s.frames.length < n) s.frames.push(this.copyTo(mk(W, H), canvas, W, H));
+        else { g.drawImage(s.frames[s.n % n], 0, 0); s.n++; }
+      } else if (L.key === 'datamosh') {
+        if (!this.moshOk || this.mosh.width !== W || this.mosh.height !== H) { this.copyTo(this.mosh, canvas, W, H); this.moshOk = true; }
+        const bs = Math.max(4, Math.round(P.block * (W / 640))); const keep = (P.amt / 100) * a;
+        const prev = this.copyTo(this.scratch, this.mosh, W, H);
+        const mg = ctx2(this.mosh); mg.drawImage(prev, 0, 0);
+        for (let y = 0; y < H; y += bs) for (let x = 0; x < W; x += bs) {
+          if (Math.random() > keep) mg.drawImage(canvas, x, y, bs, bs, x, y, bs, bs);
+          else if (Math.random() < 0.25) mg.drawImage(prev, x, y, bs, bs, x + (Math.random() - 0.5) * bs * 0.6, y + bs * 0.3, bs, bs);
+        }
+        g.drawImage(this.mosh, 0, 0);
+      }
+    }
+    if (!looks.some((L) => L.key === 'datamosh')) this.moshOk = false;
+    if (!looks.some((L) => L.key === 'step')) this.holdN = 0;
+  }
+  looksStyle(g, canvas, W, H, looks, t) {
+    for (const L of looks) {
+      const a = L.e; const P = L.params; if (a <= 0.01) continue; const k = (P.amt != null ? P.amt / 100 : 1);
+      if (L.key === 'colorshift') this.filterPass(g, canvas, W, H, 'hue-rotate(' + Math.round(L.dt * P.speed) + 'deg) saturate(' + P.sat + '%)', a);
+      else if (L.key === 'hardlight') this.filterPass(g, canvas, W, H, 'contrast(' + (1 + 0.6 * k) + ') saturate(' + (1 + 0.25 * k) + ')', a);
+      else if (L.key === 'silhouette') this.filterPass(g, canvas, W, H, 'contrast(' + (1 + 3 * k) + ') brightness(' + (1 - 0.35 * k) + ') saturate(' + (1 - 0.5 * k) + ')', a);
+      else if (L.key === 'haze') { this.filterPass(g, canvas, W, H, 'contrast(' + (1 - 0.35 * k) + ') brightness(' + (1 + 0.12 * k) + ')', a); g.save(); g.globalCompositeOperation = 'screen'; g.fillStyle = 'rgba(235,225,215,' + 0.12 * k * a + ')'; g.fillRect(0, 0, W, H); g.restore(); }
+      else if (L.key === 'xray') this.filterPass(g, canvas, W, H, 'grayscale(1) invert(1) contrast(1.45) sepia(.35) hue-rotate(170deg)', a * k);
+      else if (L.key === 'night') {
+        this.filterPass(g, canvas, W, H, 'grayscale(1) brightness(1.6) contrast(1.25) sepia(1) hue-rotate(55deg) saturate(4)', a * k);
+        const gr = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.62); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,' + 0.9 * a + ')'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+        const tile = this.tiles[(Math.random() * 4) | 0]; g.save(); g.globalCompositeOperation = 'overlay'; g.globalAlpha = 0.35 * a; for (let y = 0; y < H; y += 160) for (let x = 0; x < W; x += 160) g.drawImage(tile, x, y); g.restore();
+      } else if (L.key === 'thermal') {
+        const im = g.getImageData(0, 0, W, H); const d = im.data; const m = a * k;
+        const pal = [[10, 10, 60], [70, 0, 140], [190, 0, 120], [240, 80, 20], [255, 200, 0], [255, 255, 220]];
+        for (let i = 0; i < d.length; i += 4) {
+          const l = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255 * 5; const j = Math.min(4, l | 0); const f = l - j; const c0 = pal[j]; const c1 = pal[j + 1];
+          d[i] += (c0[0] + (c1[0] - c0[0]) * f - d[i]) * m; d[i + 1] += (c0[1] + (c1[1] - c0[1]) * f - d[i + 1]) * m; d[i + 2] += (c0[2] + (c1[2] - c0[2]) * f - d[i + 2]) * m;
+        }
+        g.putImageData(im, 0, 0);
+      } else if (L.key === 'glitch') {
+        this.copyTo(this.scratch, canvas, W, H); const amt = k * a; const sh = Math.round(W * 0.012 * amt * (0.5 + Math.random()));
+        g.save(); g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.5 * amt;
+        g.filter = 'sepia(1) saturate(8) hue-rotate(-50deg)'; g.drawImage(this.scratch, -sh, 0);
+        g.filter = 'sepia(1) saturate(8) hue-rotate(150deg)'; g.drawImage(this.scratch, sh, 0); g.restore();
+        const n = Math.round(2 + 8 * amt);
+        for (let i = 0; i < n; i++) { const y = Math.random() * H; const h = H * (0.005 + Math.random() * 0.05 * amt); const dx = (Math.random() - 0.5) * W * 0.12 * amt; g.drawImage(this.scratch, 0, y, W, h, dx, y, W, h); }
+      } else if (L.key === 'spotlight') {
+        const r = Math.min(W, H) * P.r / 100; const gr = g.createRadialGradient(W / 2, H * 0.45, r * 0.6, W / 2, H * 0.45, r * 1.15);
+        gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,' + (P.dark / 100) * a + ')'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+      } else if (L.key === 'lightflash') {
+        const gr = g.createRadialGradient(W * 0.5, H * 0.4, 0, W * 0.5, H * 0.4, Math.max(W, H) * 0.8);
+        gr.addColorStop(0, 'rgba(255,240,210,' + (P.bright / 100) * a + ')'); gr.addColorStop(1, 'rgba(255,160,80,' + 0.5 * (P.bright / 100) * a + ')');
+        g.save(); g.globalCompositeOperation = 'screen'; g.fillStyle = gr; g.fillRect(0, 0, W, H); g.restore();
+      }
+    }
   }
 
   // cfg: { src, sw, sh, t, ratio, ox, fx(items), fxOn, comps, tex?, overlays: Map, W, H }
@@ -61,9 +201,18 @@ export class Compositor {
     const jit = (tex.jitter || 0) / 100;
     const jx = jit ? (Math.random() - 0.5) * 2 * jit * 0.012 * W : 0; const jy = jit ? (Math.random() - 0.5) * 2 * jit * 0.012 * H : 0;
     const frame = fx.freeze !== null && this.snapId ? null : src;
+    let rot = 0; let zm = fx.zoom; let tx = 0; let ty = 0;
+    const nz = (x) => Math.sin(x * 1.7) * 0.5 + Math.sin(x * 3.1 + 1.3) * 0.3 + Math.sin(x * 5.3 + 0.4) * 0.2;
+    for (const L of fx.looks) {
+      const P = L.params; const a = L.e;
+      if (L.key === 'dutch') { rot += (P.deg * Math.PI / 180) * a; zm *= 1 + (P.scale / 100 - 1) * a; }
+      else if (L.key === 'roll') { const u = L.len ? Math.min(1, L.dt / L.len) : 0; const ez = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; rot += (P.turns / 100) * 2 * Math.PI * ez; zm *= P.scale / 100; }
+      else if (L.key === 'handheld') { const sp = 0.5 + 2.5 * P.speed / 100; const k = (P.amt / 100) * a; tx += nz(cfg.t * sp) * W * 0.025 * k; ty += nz(cfg.t * sp + 7) * H * 0.02 * k; rot += nz(cfg.t * sp + 3) * 0.012 * k; zm *= 1 + 0.06 * k; }
+      else if (L.key === 'wiggle') { const fi = Math.floor(cfg.t * 30 / Math.max(1, Math.round(P.frames))); tx += (fi % 2 ? 1 : -1) * W * 0.03 * (P.amt / 100) * a; zm *= 1 + 0.08 * a; }
+    }
     const drawOnce = (alpha, ox, oy) => {
       g.save(); g.globalAlpha = alpha;
-      g.translate(W / 2 + ox + jx, H / 2 + oy + jy); g.scale(fx.zoom, fx.zoom); g.translate(-W / 2, -H / 2);
+      g.translate(W / 2 + ox + jx + tx, H / 2 + oy + jy + ty); if (rot) g.rotate(rot); g.scale(zm, zm); g.translate(-W / 2, -H / 2);
       if (frame) g.drawImage(src, sx, sy, cw, ch, dx, dy, dw, dh); else g.drawImage(this.snap, 0, 0);
       g.restore();
     };
@@ -77,6 +226,9 @@ export class Compositor {
       g.fillStyle = '#f0f0f0'; g.fillRect(0, y - 1, W, 2);
     }
 
+    // efeitos do Eyecandy: tempo e geometria (antes da cor)
+    this.pushRing(canvas, W, H, cfg.t);
+    if (fx.looks.length) { this.looksTime(g, canvas, W, H, fx.looks); this.looksGeo(g, canvas, W, H, fx.looks); }
     // cor
     const comps = cfg.comps || [];
     const hala = []; let amountExtra = (tex.halation || 0) / 100;
@@ -112,8 +264,21 @@ export class Compositor {
       gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,' + Math.min(0.9, (tex.vignette / 100) * 0.9) + ')');
       g.fillStyle = gr; g.fillRect(0, 0, W, H);
     }
+    if (tex.fade) this.filterPass(g, canvas, W, H, 'sepia(' + (0.35 * tex.fade / 100) + ') saturate(' + (1 - 0.3 * tex.fade / 100) + ') contrast(' + (1 - 0.15 * tex.fade / 100) + ') brightness(' + (1 + 0.05 * tex.fade / 100) + ')', 1);
+    if (tex.frame) {
+      const k = tex.frame / 100; const m = Math.min(W, H) * (0.015 + 0.05 * k); const rr = Math.min(W, H) * (0.03 + 0.09 * k);
+      const wx = jit ? (Math.random() - 0.5) * m * 0.3 : 0;
+      g.save(); g.fillStyle = '#060606'; g.beginPath(); g.rect(0, 0, W, H);
+      if (g.roundRect) g.roundRect(m + wx, m, W - 2 * m, H - 2 * m, rr); else g.rect(m, m, W - 2 * m, H - 2 * m);
+      g.fill('evenodd');
+      const gr = g.createLinearGradient(0, 0, m * 3, 0); gr.addColorStop(0, 'rgba(0,0,0,' + 0.5 * k + ')'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, m * 3, H);
+      g.restore();
+    }
     if (tex.flicker) { const a = Math.random() * (tex.flicker / 100) * 0.16; g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,' + a + ')' : 'rgba(0,0,0,' + a * 1.4 + ')'; g.fillRect(0, 0, W, H); }
 
+    if (fx.looks.length) this.looksStyle(g, canvas, W, H, fx.looks, cfg.t);
+    const rb = fx.looks.find((L) => L.key === 'ratio');
+    if (rb) { const h = H * (rb.params.to / 100) / 2 * rb.e; g.fillStyle = '#000'; g.fillRect(0, 0, W, h); g.fillRect(0, H - h, W, h); }
     // overlays em vídeo (modo Screen)
     for (const it of items) {
       if (it.kind !== 'ov' || cfg.t < it.a || cfg.t >= it.b) continue;

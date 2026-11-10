@@ -9,6 +9,7 @@ import { extractPalette } from './grade.js';
 import { sampleCanvas } from './render.js';
 import { SOUNDS } from './fx.js';
 import * as T from './transcript.js';
+import { EYECANDY, CATS, EYE_URL } from './eyecandy.js';
 import { transcribe } from './transcribe.js';
 
 const SMALL = ['de', 'da', 'do', 'das', 'dos', 'à', 'e', 'a', 'o'];
@@ -41,27 +42,43 @@ export function renderRail() {
 
 // ---------- Efeitos ----------
 const BADGE = { Ajuste: '', Linguagem: 'ghost', Preset: '', Gerado: 'ghost', Arquivo: 'dash' };
+const ECATS = [['all', 'Todas'], ['aqui', 'Feitas aqui'], ...Object.entries(CATS)];
+const fgUrl = (q) => 'https://film-grab.com/?s=' + encodeURIComponent(q);
+const micUrl = (q) => 'https://www.google.com/search?q=' + encodeURIComponent('site:moviesincolor.com ' + q);
+const FLIM_URL = 'https://app.flim.ai/';
+export const refLinks = (q) => `<a href="${fgUrl(q)}" target="_blank" rel="noopener noreferrer">Film Grab</a> · <a href="${FLIM_URL}" target="_blank" rel="noopener noreferrer" title="Busca dentro do Flim (pede conta)">Flim</a> · <a href="${micUrl(q)}" target="_blank" rel="noopener noreferrer">Movies in Color</a>`;
+const eyeOf = (it) => it.slug || ((EYECANDY.find((r) => r.fx === it.key) || {}).slug);
 function libRows() {
   const q = app.ui.search.trim().toLowerCase();
   const hit = (...s) => !q || s.join(' ').toLowerCase().includes(q);
   const e = edit();
-  if (app.ui.etab === 'tec') return F.TECH.filter((t) => hit(t.name, t.hint)).map((t) => `<button type="button" class="lib-row" data-act="fx-add" data-k="${t.key}"><span class="t"><b>${t.name}</b><span class="h">${t.hint}</span></span><span class="badge ${BADGE[t.badge]}">${t.badge}</span></button>`).join('');
-  if (app.ui.etab === 'cin') {
-    const rows = (e ? e.cinema : M.DEFAULT_CINEMA).filter((c) => hit(c.name, c.dir)).map((c) => {
-      const links = F.CINEMA_SITES.map(([n, u]) => `<a href="${u}${u.endsWith('=') ? encodeURIComponent(c.name.toLowerCase()) : ''}" target="_blank" rel="noopener noreferrer">${n}</a>`).join(' · ');
-      return `<div class="lib-row" role="group"><span class="t"><b>${esc(c.name)}</b><span class="h">${esc(c.dir || '')}</span><span class="h2">${links}</span></span><button type="button" class="badge ${c.state === 'use' ? 'use' : 'ghost'}" style="border:${c.state === 'use' ? '0' : '1px solid #6a7078'};cursor:pointer" data-act="cin-toggle" data-k="${c.key}" title="Clique pra ${c.state === 'use' ? 'guardar' : 'usar no projeto'}">${c.state === 'use' ? 'Em uso' : 'Salvo'}</button></div>`;
-    }).join('');
-    return rows + `<button type="button" class="lib-row" data-act="cin-add"><span class="t"><b>ADICIONAR REFERÊNCIA</b><span class="h">Cole o link de um dos três sites</span></span><span class="badge ghost">Novo</span></button>`;
+  if (app.ui.etab === 'tec') {
+    const cat = app.ui.ecat || 'all';
+    const list = EYECANDY.filter((r) => (cat === 'all' || (cat === 'aqui' ? r.fx : r.cat === cat)) && hit(r.name, r.hint, CATS[r.cat]));
+    return list.map((r) => { const made = !!r.fx; return `<div class="lib-row"><button type="button" class="t" data-act="eye-add" data-slug="${r.slug}" title="${made ? 'Adiciona o efeito no playhead' : 'Adiciona um marcador de linguagem no playhead'}"><b>${esc(r.name.toUpperCase())}</b><span class="h">${esc(r.hint)}</span><span class="h2">${CATS[r.cat]}</span></button>
+      <a class="eye" href="${EYE_URL + r.slug}" target="_blank" rel="noopener noreferrer" title="Ver ${esc(r.name)} no Eyecandy" aria-label="Ver ${esc(r.name)} no Eyecandy">↗</a><span class="badge ${made ? '' : 'ghost'}">${made ? 'Ajuste' : 'Linguagem'}</span></div>`; }).join('') || '<div class="note" style="padding:10px 6px">Nenhuma técnica com esse nome.</div>';
   }
+  if (app.ui.etab === 'cin') {
+    const refs = (e ? e.cinema : M.DEFAULT_CINEMA);
+    const qq = app.ui.search.trim();
+    const look = qq ? `<div class="lib-row find"><span class="t"><b>PROCURAR “${esc(qq.toUpperCase())}”</b><span class="h2">${refLinks(qq)}</span></span>${e ? `<button type="button" class="badge" style="cursor:pointer;border:0" data-act="cin-quick">Adicionar</button>` : ''}</div>` : '';
+    const rows = refs.filter((c) => hit(c.name, c.dir, c.dp, c.year)).map((c) => `<div class="lib-row${app.ui.selRef === c.key ? ' on' : ''}"><button type="button" class="t" data-act="ref-open" data-k="${c.key}"><b>${esc(c.name)}</b><span class="h">${c.dir ? 'Dir. ' + esc(c.dir) : 'Direção não anotada'}${c.year ? ' · ' + esc(c.year) : ''}</span><span class="h2">${refLinks(c.name.toLowerCase())}</span></button>
+      <button type="button" class="badge ${c.state === 'use' ? 'use' : 'ghost'}" style="border:${c.state === 'use' ? '0' : '1px solid #6a7078'};cursor:pointer" data-act="cin-toggle" data-k="${c.key}" title="Clique pra ${c.state === 'use' ? 'guardar' : 'usar no projeto'}">${c.state === 'use' ? 'Em uso' : 'Salvo'}</button></div>`).join('');
+    return look + rows + `<button type="button" class="lib-row" data-act="cin-add"><span class="t"><b>ADICIONAR REFERÊNCIA</b><span class="h">Qualquer filme do Film Grab, Flim ou Movies in Color</span></span><span class="badge ghost">Novo</span></button>`;
+  }
+  const mine = app.lib.items.filter((i) => i.kind === 'video' && i.role === 'Overlays' && hit(i.name));
   return F.TEXTURES.filter((t) => hit(t.name, t.hint)).map((t) => `<button type="button" class="lib-row" data-act="tex-add" data-k="${t.key}"><span class="t"><b>${t.name}</b><span class="h">${t.hint}</span></span><span class="badge ${BADGE[t.badge]}">${t.badge}</span></button>`).join('')
-    + `<button type="button" class="lib-row" data-act="ov-add"><span class="t"><b>${F.OVERLAY.name}</b><span class="h">${F.OVERLAY.hint}</span></span><span class="badge dash">Arquivo</span></button>`;
+    + mine.map((i) => `<button type="button" class="lib-row" data-act="ov-pick" data-id="${i.id}"><span class="t"><b>OVERLAY · ${esc(i.name.replace(/\.[^.]+$/, '').toUpperCase())}</b><span class="h">Da tua pasta Overlays, em modo Screen</span></span><span class="badge dash">Arquivo</span></button>`).join('')
+    + `<button type="button" class="lib-row" data-act="ov-add"><span class="t"><b>${F.OVERLAY.name}</b><span class="h">${F.OVERLAY.hint}</span></span><span class="badge dash">Arquivo</span></button>`
+    + `<button type="button" class="lib-row" data-act="pack-8mm"><span class="t"><b>PACK 8MM GRATUITO</b><span class="h">Onde baixar scans reais de 8 mm pra pasta Overlays</span></span><span class="badge ghost">Links</span></button>`;
 }
-const NOTES = { tec: 'Vocabulário Eyecandy: só o nome e a receita. O efeito é produzido aqui.', cin: 'Os links levam pro Film Grab, Flim e Movies in Color. Nenhuma imagem deles fica aqui.', tex: 'Gerado no Workbench. Overlays em arquivo vêm da tua biblioteca.' };
+const NOTES = { tec: 'Vocabulário Eyecandy (' + EYECANDY.length + ' técnicas): só o nome e o link. Ajuste é produzido aqui; Linguagem vira marcador.', cin: 'Busca nos três sites pelo nome. Nenhuma imagem deles fica aqui; os detalhes e a paleta são anotados por você.', tex: 'Gerado no Workbench. Overlays em arquivo vêm da tua pasta Overlays.' };
 export function renderEfeitos() {
   const t = app.ui.etab;
   $('#efeitos').innerHTML = `<div class="p-head"><h2 class="tool" style="margin-bottom:10px">Efeitos</h2>
     <div class="seg" style="display:flex">${[['tec', 'Técnicas'], ['cin', 'Cinema'], ['tex', 'Textura']].map(([k, l]) => `<button type="button" style="flex:1" aria-pressed="${t === k}" data-act="etab" data-v="${k}">${l}</button>`).join('')}</div>
-    <input class="search" id="fx-search" type="text" aria-label="Buscar" placeholder="Buscar nome, filme ou diretor" value="${esc(app.ui.search)}" autocomplete="off"></div>
+    <input class="search" id="fx-search" type="text" aria-label="Buscar" placeholder="${t === 'cin' ? 'Buscar filme ou diretor' : t === 'tec' ? 'Buscar técnica' : 'Buscar textura'}" value="${esc(app.ui.search)}" autocomplete="off">
+    ${t === 'tec' ? `<div class="cats">${ECATS.map(([k, l]) => `<button type="button" data-act="ecat" data-v="${k}" aria-pressed="${(app.ui.ecat || 'all') === k}">${l}</button>`).join('')}</div>` : ''}</div>
     <div class="p-list" id="lib-list">${libRows()}</div><div class="p-foot">${NOTES[t]}</div>`;
 }
 const refreshLib = () => { const l = $('#lib-list'); if (l) l.innerHTML = libRows(); };
@@ -80,10 +97,10 @@ export function renderMonitorBar() {
 
 const sw = (cols) => '<div class="sw">' + cols.map((c) => `<i style="background:${c}"></i>`).join('') + '</div>';
 export function renderPalette() {
-  const cur = app.palCur; const ref = (edit() && edit().refPal) || EX_PAL;
+  const cur = app.palCur; const e0 = edit(); const ref = (e0 && M.refPalette(e0)) || EX_PAL; const refName = e0 && (e0.cinema.find((c) => c.state === 'use' && c.pal) || {}).name;
   const blk = (p) => ['Claros', 'Médios', 'Escuros'].map((l, i) => `<div class="lb">${l}</div>${sw(p ? p[i] : [])}`).join('');
   $('#pal').innerHTML = `<div><div class="t">Teu material · cena atual</div>${blk(cur)}</div>
-    <div><div class="t">Referência</div><div class="s">${edit() && edit().refPal ? 'Paleta anotada por você' : 'Exemplo, a paleta é anotada por você'}</div>${blk(ref)}</div>
+    <div><div class="t">Referência</div><div class="s">${refName ? 'Paleta de ' + esc(titleCase(refName)) : e0 && e0.refPal ? 'Paleta anotada por você' : 'Exemplo, a paleta é anotada por você'}</div>${blk(ref)}</div>
     <button type="button" class="btn" style="margin-top:auto" data-act="go-cor">Abrir na aba Cor</button>`;
 }
 
@@ -236,7 +253,7 @@ function onPointerDown(ev) {
   const c = ev.target.closest('[data-clip],[data-sfx]');
   if (!c || !st()) return;
   const id = c.dataset.clip || c.dataset.sfx; const it = edit().fx.find((f) => f.id === id); if (!it) return;
-  app.ui.sel = id; app.ui.itab = 'efeito';
+  app.ui.sel = id; app.ui.selRef = null; app.ui.itab = 'efeito';
   const lane = c.closest('.lane');
   drag = { id, mode: c.dataset.sfx ? 'sfx' : ev.target.dataset.rz ? 'resize' : 'move', x0: ev.clientX, lane, a0: it.a, b0: it.b, off0: it.sfx ? it.sfx.off : 0, moved: false };
   c.setPointerCapture && c.setPointerCapture(ev.pointerId);
@@ -316,7 +333,7 @@ function itemHtml(it) {
     ${defs.length || tex || it.kind === 'ov' ? `<div><h3>${tex ? 'Conteúdo' : 'Parâmetros'}</h3>${textF}${defs.map((d) => sliderHtml(it, d)).join('')}${ovF}</div>` : ''}
     ${it.kf && it.kf.length ? `<div><h3>Keyframes</h3><div style="margin-top:6px">${kfHtml(it)}</div></div>` : ''}
     ${it.kind !== 'tt' ? `<div><h3>Som do efeito</h3><div style="margin-top:6px">${sfx}</div></div>` : ''}
-    <div><h3>Receita</h3><div style="margin-top:6px;line-height:1.5">${esc(F.recipeOf(it))}</div></div>
+    <div><h3>Receita</h3><div style="margin-top:6px;line-height:1.5">${esc(F.recipeOf(it))}</div>${eyeOf(it) ? `<a class="btn sm" style="margin-top:8px" href="${EYE_URL + eyeOf(it)}" target="_blank" rel="noopener noreferrer">Ver referência no Eyecandy ↗</a>` : ''}</div>
     <div class="foot"><button type="button" class="btn solid" data-act="it-accept" ${it.accepted ? 'aria-disabled="true"' : ''}>${it.accepted ? 'Aceito' : 'Aceitar'}</button>${['tec', 'tx'].includes(it.kind) ? '<button type="button" class="btn" data-act="it-swap">Trocar efeito</button>' : ''}<button type="button" class="btn" data-act="it-del">Apagar</button></div>`;
 }
 function clipeHtml() {
@@ -345,11 +362,23 @@ function exportTabHtml() {
     <div class="note">A entrega usa o mesmo desenho da prévia: reenquadre, efeitos, cor, textura, overlay e texto.</div>
     <div class="foot"><button type="button" class="btn solid" data-act="tab" data-v="entrega">Ir para Entrega</button></div>`;
 }
+function refHtml(c) {
+  const f = (k, l, ph = '') => `<div class="field">${l}<input type="text" value="${esc(c[k] || '')}" placeholder="${ph}" data-act="ref-field" data-k="${k}" data-ref="${c.key}"></div>`;
+  const pal = c.pal ? ['Claros', 'Médios', 'Escuros'].map((l, i) => `<div class="note">${l}</div><div class="sw">${c.pal[i].map((h) => `<i style="background:${h}"></i>`).join('')}</div>`).join('') : '<div class="note">Sem paleta ainda. Tire de um still do filme (salve a imagem do Film Grab e carregue aqui).</div>';
+  return `<div class="chips"><span class="kchip">Referência de cinema</span>${c.state === 'use' ? '<span class="kchip o">Em uso no projeto</span>' : ''}</div><h3 class="big">${esc(titleCase(c.name))}</h3>
+    <div class="note">${refLinks(c.name.toLowerCase())}</div>
+    <div style="display:flex;flex-direction:column;gap:8px">${f('name', 'Filme')}${f('dir', 'Direção')}${f('year', 'Ano', 'Ex.: 2002')}${f('dp', 'Direção de fotografia')}
+    <div class="field">Notas de luz, cor e enquadramento<textarea data-act="ref-field" data-k="notes" data-ref="${c.key}" rows="4" placeholder="Ex.: contraluz quente, sombras verdes, câmera na mão">${esc(c.notes || '')}</textarea></div></div>
+    <div><h3>Paleta anotada</h3><div style="margin-top:6px">${pal}</div><div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button type="button" class="btn sm" data-act="ref-pal" data-k="${c.key}">Tirar paleta de uma imagem</button>${c.pal ? `<button type="button" class="btn sm" data-act="ref-pal-clear" data-k="${c.key}">Limpar</button>` : ''}</div>
+    <div class="note" style="margin-top:6px">A paleta da primeira referência em uso vira a referência do projeto no monitor e na aba Cor.</div></div>
+    <div class="foot"><button type="button" class="btn solid" data-act="cin-toggle" data-k="${c.key}">${c.state === 'use' ? 'Tirar do projeto' : 'Usar no projeto'}</button><button type="button" class="btn" data-act="ref-del" data-k="${c.key}">Apagar</button></div>`;
+}
 export function renderInspector() {
   const it = selItem(); const t = app.ui.itab;
+  const ref = !it && app.ui.selRef && edit() ? edit().cinema.find((c) => c.key === app.ui.selRef) : null;
   const tabs = [['efeito', 'Efeito'], ['clipe', 'Clipe'], ['exportacao', 'Exportação']];
   let body;
-  if (t === 'efeito') body = it ? itemHtml(it) : `<div class="hint-empty">Nada selecionado. Clique num efeito, textura ou som na timeline, ou escolha um em <b>Efeitos</b> à esquerda. O Auto-FX também sugere tudo pra você revisar.</div>`;
+  if (t === 'efeito') body = it ? itemHtml(it) : ref ? refHtml(ref) : `<div class="hint-empty">Nada selecionado. Clique num efeito, textura ou som na timeline, ou escolha um em <b>Efeitos</b> à esquerda. O Auto-FX também sugere tudo pra você revisar.</div>`;
   else if (t === 'clipe') body = clipeHtml(); else body = exportTabHtml();
   $('#inspector').innerHTML = `<div class="insp-tabs">${tabs.map(([k, l]) => `<button type="button" data-act="itab" data-v="${k}" aria-pressed="${t === k}">${l}</button>`).join('')}</div>${body}`;
 }
@@ -463,14 +492,44 @@ export const actions = {
     else if (n === 'Cor') hooks.go('cor');
     else if (n === 'Auto-FX') { go('#autofx'); if (st() && !edit().fx.some((f) => f.auto)) autofxRun(); }
   },
-  etab(el) { app.ui.etab = el.dataset.v; renderEfeitos(); },
+  etab(el) { app.ui.etab = el.dataset.v; app.ui.search = ''; renderEfeitos(); },
+  ecat(el) { app.ui.ecat = el.dataset.v; renderEfeitos(); },
+  'eye-add'(el) {
+    if (!st()) { toast('Abra um vídeo primeiro.'); return; }
+    const r = EYECANDY.find((x) => x.slug === el.dataset.slug); const fx = r.fx;
+    let item;
+    if (fx && fx.startsWith('tex:')) item = F.newTexture(fx.slice(4), app.ph, app.duration);
+    else if (fx && fx.startsWith('text:')) item = F.newText(fx.slice(5), app.ph, app.duration);
+    else if (fx) item = F.newTech(fx, app.ph, app.duration);
+    else item = F.newLang(r, app.ph, app.duration);
+    item.slug = r.slug; item.why = 'Técnica do Eyecandy: ' + r.name + '. Adicionada por você no playhead.';
+    addItem('Adicionar ' + r.name, item);
+  },
+  'ref-open'(el) { app.ui.selRef = el.dataset.k; app.ui.sel = null; app.ui.itab = 'efeito'; refreshLib(); renderInspector(); },
+  'cin-quick'() {
+    const q = app.ui.search.trim(); if (!q) return; const key = 'u' + Date.now().toString(36);
+    mutEdit('Nova referência: ' + q, (e) => { e.cinema.push({ key, name: q.toUpperCase(), dir: '', year: '', dp: '', notes: '', url: '', pal: null, state: 'saved' }); return e; });
+    app.ui.selRef = key; app.ui.sel = null; app.ui.itab = 'efeito'; app.ui.search = ''; renderEfeitos(); renderInspector();
+  },
+  'ref-del'(el) { const k = el.dataset.k; mutEdit('Apagar referência', (e) => { e.cinema = e.cinema.filter((c) => c.key !== k); return e; }); app.ui.selRef = null; hooks.renderAll(); },
+  'ref-pal'(el) { app.palTarget = el.dataset.k; $('#ref-file').click(); },
+  'ref-pal-clear'(el) { const k = el.dataset.k; mutEdit('Limpar paleta da referência', (e) => { e.cinema.find((c) => c.key === k).pal = null; return e; }); },
+  'pack-8mm'() {
+    const dlg = $('#dlg');
+    dlg.innerHTML = `<div class="dlg"><h2>Pack 8mm gratuito</h2><div class="muted" style="line-height:1.5">Scans reais de película 8 mm pra usar como overlay. O Workbench não guarda nem redistribui esses arquivos: baixe no site, coloque na tua pasta <b>Overlays</b> e adicione a pasta no Material. Eles aparecem aqui na Textura.</div>
+      ${F.PACKS_8MM.map((p) => `<a class="opt" href="${p.url}" target="_blank" rel="noopener noreferrer"><b>${esc(p.name)} ↗</b><span>${esc(p.what)}</span></a>`).join('')}
+      <div class="note">Confira a licença de cada arquivo no site antes de usar em trabalho comercial. Quando pedir crédito, preencha o criador no overlay que ele entra no creditos.txt da entrega.</div>
+      <div class="row2"><button type="button" class="btn" data-act="dlg-close">Fechar</button><button type="button" class="btn solid" data-act="tex-add" data-k="8mm">Usar o 8 MM gerado aqui</button></div></div>`;
+    dlg.showModal();
+  },
   'fx-add'(el) { if (!st()) { toast('Abra um vídeo primeiro.'); return; } addItem('Adicionar ' + nice(F.techOf(el.dataset.k).name), F.newTech(el.dataset.k, app.ph, app.duration)); },
   'tex-add'(el) {
+    if ($('#dlg').open) $('#dlg').close();
     if (!st()) { toast('Abra um vídeo primeiro.'); return; }
     addItem('Adicionar textura ' + nice(F.texOf(el.dataset.k).name), F.newTexture(el.dataset.k, app.ph, app.duration));
   },
   'ov-add'() { if (!st()) { toast('Abra um vídeo primeiro.'); return; } openOverlayPicker(); },
-  'ov-pick'(el) { const i = app.lib.get(el.dataset.id); $('#dlg').close(); addItem('Adicionar overlay', F.newOverlay(i.id, i.name, app.ph, app.duration)); },
+  'ov-pick'(el) { if (!st()) { toast('Abra um vídeo primeiro.'); return; } const i = app.lib.get(el.dataset.id); if ($('#dlg').open) $('#dlg').close(); addItem('Adicionar overlay', F.newOverlay(i.id, i.name, app.ph, app.duration)); },
   'dlg-close'() { $('#dlg').close(); },
   'cin-toggle'(el) { mutEdit('Estilo: ' + el.dataset.k, (e) => { const c = e.cinema.find((x) => x.key === el.dataset.k); c.state = c.state === 'use' ? 'saved' : 'use'; return e; }); },
   'cin-add'() { openCinemaAdd(); },
@@ -511,7 +570,7 @@ export const actions = {
   },
   'idea-del'(el) { mutEdit('Apagar ideia', (e) => M.removeIdea(e, el.dataset.id)); app.ui.selIdea = null; hooks.renderAll(); },
   itab(el) { app.ui.itab = el.dataset.v; renderInspector(); },
-  sel(el) { app.ui.sel = el.dataset.id; app.ui.itab = 'efeito'; const it = selItem(); if (it) hooks.seek(it.a + 0.01); hooks.renderAll(); },
+  sel(el) { app.ui.selRef = null; app.ui.sel = el.dataset.id; app.ui.itab = 'efeito'; const it = selItem(); if (it) hooks.seek(it.a + 0.01); hooks.renderAll(); },
   'it-accept'() { const it = selItem(); if (!it || it.accepted) return; mutEdit('Aceitar ' + nice(it.name), (e) => M.updateFx(e, it.id, { accepted: true })); },
   'it-del'() { const it = selItem(); if (!it) return; mutEdit('Apagar ' + nice(it.name), (e) => M.removeFx(e, it.id)); app.ui.sel = null; hooks.renderAll(); },
   'it-swap'() {
@@ -550,6 +609,7 @@ function paramInput(ev) {
     const stt = $('#d-status'); if (stt) stt.innerHTML = 'Última ação: <b>' + esc(app.hist.label) + '</b> · passo ' + app.hist.step + ' de ' + app.hist.total;
     hooks.renderHeader(); hooks.preview(); return;
   }
+  if (act === 'ref-field') { const k = el.dataset.k; const rk = el.dataset.ref; const v = k === 'name' ? el.value.toUpperCase() : el.value; mutLight('Detalhe da referência', (e) => { e.cinema.find((c) => c.key === rk)[k] = v; return e; }, 'rf:' + rk + k); refreshLib(); return; }
   if (act === 'seg-text') { const k = +el.dataset.k; mutLight('Corrigir transcrição', (e) => { e.transcript.segs[k].text = el.value; return e; }, 'seg:' + k); return; }
   const id = el.dataset.id; if (!id) return;
   if (act === 'param') {
@@ -569,7 +629,7 @@ function paramInput(ev) {
 function paramChange(ev) {
   const act = ev.target.dataset.act;
   if (act === 'credit-req') { mutEdit('Atribuição do overlay', (e) => M.updateFx(e, ev.target.dataset.id, (f) => { f.credit = { ...f.credit, required: ev.target.checked }; })); return; }
-  if (['param', 'sfx-vol', 'text', 'credit', 'offset', 'idea-name', 'seg-text'].includes(act) && app.hist) { app.hist.seal(); hooks.renderAll(); }
+  if (['param', 'sfx-vol', 'text', 'credit', 'offset', 'idea-name', 'seg-text', 'ref-field'].includes(act) && app.hist) { app.hist.seal(); hooks.renderAll(); }
 }
 
 // keyframes

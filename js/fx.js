@@ -40,7 +40,7 @@ export const TECH = [
     sfx: { key: 'impact', off: 0, vol: -6, when: 'Entra junto com o efeito' },
     recipe: 'Quadro branco de 3 quadros em cima do corte, entrada seca e saída rápida. O impacto bate no primeiro quadro.' },
   { key: 'zoom', name: 'ZOOM', hint: 'Zoom de ênfase na palavra', badge: 'Ajuste', len: 2,
-    params: [{ k: 'scale', label: 'Escala final', min: 100, max: 200, def: 115, unit: '%' }, { k: 'curve', label: 'Curva', min: 0, max: 2, def: 1, unit: 'curve' }],
+    params: [{ k: 'scale', label: 'Escala final', min: 100, max: 300, def: 115, unit: '%' }, { k: 'curve', label: 'Curva', min: 0, max: 3, def: 1, unit: 'curve' }],
     kf: [{ x: 0, y: 36 }, { x: 70, y: 8 }, { x: 100, y: 8 }],
     sfx: { key: 'pop', off: -0.03, vol: -12, when: 'Entra 1 quadro antes' },
     recipe: 'Escala de 100% para 115% em 10 quadros, com ease out. Volta ao normal no próximo corte.' },
@@ -60,13 +60,57 @@ export const TECH = [
     recipe: 'Marcador de linguagem: lembra que aqui entra uma cena com câmera deslizando. Não altera a imagem.' }
 ];
 
+
+// Técnicas do Eyecandy produzidas aqui (além das acima). y dos keyframes: menor = mais forte.
+const P = (k, label, min, max, def, unit, extra = {}) => ({ k, label, min, max, def, unit, ...extra });
+const FADE = [{ x: 0, y: 36 }, { x: 12, y: 4 }, { x: 88, y: 4 }, { x: 100, y: 36 }];
+const HOLD = [{ x: 0, y: 4 }, { x: 100, y: 4 }];
+const T2 = (key, name, hint, len, params, recipe, kf = HOLD, sfx = null) => ({ key, name, hint, badge: 'Ajuste', len, params, kf: kf.map((k) => ({ ...k })), sfx, recipe });
+TECH.push(
+  T2('slow', 'SLOW MOTION', 'Câmera lenta', 2, [P('rate', 'Velocidade', 20, 90, 50, '%')], 'O trecho toca mais devagar. Fica mais liso em vídeo gravado com muitos quadros por segundo (60 ou 120).'),
+  T2('fast', 'FAST MOTION', 'Tempo acelerado', 2, [P('rate', 'Velocidade', 150, 400, 250, '%')], 'O trecho toca mais rápido, o filme fica mais curto nesse ponto.'),
+  T2('dutch', 'DUTCH ANGLE', 'Horizonte torto', 2, [P('deg', 'Inclinação', -30, 30, 12, '°'), P('scale', 'Zoom pra esconder bordas', 100, 160, 125, '%')], 'Gira o quadro e aproxima pra não aparecer borda preta.', FADE),
+  T2('roll', 'CAMERA ROLL', 'Quadro gira no próprio eixo', 1.5, [P('turns', 'Voltas', 25, 200, 100, '%'), P('scale', 'Zoom pra esconder bordas', 100, 200, 150, '%')], 'O quadro gira em volta do centro, com aceleração no começo e freio no fim.'),
+  T2('handheld', 'HANDHELD', 'Câmera na mão', 3, [P('amt', 'Tremida', 5, 100, 40, '%'), P('speed', 'Velocidade', 20, 100, 50, '%')], 'Tremida suave e irregular, como câmera no ombro. Aproxima um pouco pra não aparecer borda.', FADE),
+  T2('wiggle', 'WIGGLEGRAM', 'Vai e volta entre dois ângulos', 2, [P('amt', 'Distância', 5, 100, 40, '%'), P('frames', 'Troca a cada', 2, 8, 3, 'quadros')], 'Alterna o quadro pra esquerda e pra direita em poucos quadros, como foto 3D caseira.'),
+  T2('colorshift', 'COLOR SHIFT', 'Cor que gira', 2, [P('speed', 'Giro por segundo', 10, 360, 120, '°'), P('sat', 'Saturação', 100, 250, 140, '%')], 'A matiz gira ao longo do trecho e a saturação sobe.', FADE),
+  T2('double', 'DOUBLE EXPOSURE', 'Duas imagens sobrepostas', 2, [P('mix', 'Mistura', 10, 90, 50, '%'), P('delay', 'Atraso da segunda', 2, 30, 12, 'quadros')], 'Sobrepõe o quadro atual com um quadro de instantes antes, em modo Screen.', FADE),
+  T2('echo', 'ECHO PRINT', 'Rastro dos quadros anteriores', 2, [P('n', 'Rastros', 2, 8, 5, 'quadros'), P('amt', 'Intensidade', 10, 100, 60, '%')], 'Cada quadro carrega o fantasma dos anteriores, cada vez mais fraco.', FADE),
+  T2('mblur', 'MOTION BLUR', 'Borrão de movimento', 2, [P('amt', 'Intensidade', 10, 95, 60, '%')], 'Mistura o quadro com o anterior, então tudo que se mexe borra.', FADE),
+  T2('step', 'STEP-PRINT', 'Movimento picotado', 2, [P('hold', 'Segura cada quadro', 2, 8, 3, 'quadros')], 'Segura cada quadro por vários quadros, como filme rodado em velocidade baixa.'),
+  T2('stutter', 'STUTTER', 'Gagueira de imagem', 1.5, [P('len', 'Pedaço repetido', 2, 12, 6, 'quadros')], 'Repete um pedacinho de poucos quadros em loop enquanto dura o trecho.'),
+  T2('glitch', 'FEEDBACK', 'Glitch e sinal quebrado', 1, [P('amt', 'Intensidade', 10, 100, 60, '%')], 'Separa as cores e desloca faixas horizontais da imagem, aleatórias a cada quadro.', FADE, { key: 'swoosh', off: 0, vol: -14, when: 'Entra junto com o efeito' }),
+  T2('datamosh', 'DATAMOSH', 'Compressão quebrada', 1.5, [P('amt', 'Intensidade', 10, 100, 70, '%'), P('block', 'Tamanho dos blocos', 8, 64, 24, 'px')], 'O quadro novo só entra em alguns blocos, o resto arrasta o quadro anterior, como vídeo corrompido.', FADE),
+  T2('kaleido', 'KALEIDOSCOPE', 'Imagem espelhada em fatias', 2, [P('n', 'Fatias', 4, 12, 6, ''), P('spin', 'Giro', 0, 100, 20, '%')], 'Recorta uma fatia do quadro e espelha em volta do centro.', FADE),
+  T2('dup', 'DUPLICATION', 'Quadro repetido em grade', 2, [P('n', 'Grade', 2, 4, 2, '×')], 'Repete o quadro inteiro numa grade.'),
+  T2('pip', 'SCREEN IN SCREEN', 'Um vídeo dentro do outro', 3, [P('size', 'Tamanho', 20, 60, 35, '%'), P('pos', 'Canto', 0, 3, 1, 'corner'), P('delay', 'Atraso', 0, 30, 15, 'quadros')], 'Uma janela menor com o mesmo vídeo atrasado, num dos cantos.'),
+  T2('fisheye', 'FISHEYE', 'Lente olho de peixe', 2, [P('amt', 'Curvatura', 10, 100, 55, '%')], 'Estica o centro e dobra as bordas, como lente olho de peixe.', FADE),
+  T2('pixel', 'PIXEL ART', 'Pixels grandes', 2, [P('size', 'Tamanho do pixel', 4, 40, 12, 'px')], 'Reduz a imagem e amplia sem suavizar.', FADE),
+  T2('tiltshift', 'TILT SHIFT', 'Efeito de miniatura', 3, [P('pos', 'Altura da faixa', 10, 90, 55, '%'), P('blur', 'Desfoque', 2, 20, 8, 'px'), P('sat', 'Saturação', 100, 200, 135, '%')], 'Só uma faixa fica em foco, em cima e embaixo borram, e a cor fica viva como maquete.'),
+  T2('shallow', 'SHALLOW FOCUS', 'Fundo desfocado', 3, [P('blur', 'Desfoque', 2, 20, 8, 'px'), P('size', 'Área em foco', 20, 80, 45, '%')], 'Mantém o centro nítido e desfoca as bordas, imitando pouca profundidade de campo.', FADE),
+  T2('focal', 'FOCAL SHIFT', 'Foco que vai e volta', 2, [P('blur', 'Desfoque máximo', 2, 24, 10, 'px')], 'Desfoca e volta a focar seguindo os keyframes.', [{ x: 0, y: 36 }, { x: 50, y: 4 }, { x: 100, y: 36 }]),
+  T2('spotlight', 'SPOTLIGHT', 'Luz num ponto', 3, [P('r', 'Raio', 10, 80, 35, '%'), P('dark', 'Escuridão', 20, 100, 80, '%')], 'Escurece tudo fora de um círculo de luz no centro.', FADE),
+  T2('silhouette', 'SILHOUETTE', 'Assunto preto contra a luz', 2, [P('amt', 'Intensidade', 20, 100, 80, '%')], 'Contraste no máximo e brilho baixo: quem está na frente da luz vira sombra.', FADE),
+  T2('hardlight', 'HARD LIGHT', 'Luz dura', 2, [P('amt', 'Intensidade', 10, 100, 60, '%')], 'Mais contraste e um pouco mais de saturação, sombras recortadas.', FADE),
+  T2('haze', 'HAZE', 'Névoa', 3, [P('amt', 'Intensidade', 10, 100, 55, '%')], 'Pretos lavados, contraste baixo e um véu de luz.', FADE),
+  T2('lightflash', 'LIGHT FLASH', 'Clarão quente', 0.6, [P('bright', 'Brilho', 20, 100, 80, '%')], 'Um clarão quente que cresce e some rápido.', [{ x: 0, y: 36 }, { x: 30, y: 4 }, { x: 100, y: 36 }], { key: 'impact', off: 0, vol: -12, when: 'Entra junto com o efeito' }),
+  T2('night', 'NIGHT VISION', 'Visão noturna', 2, [P('amt', 'Intensidade', 30, 100, 90, '%')], 'Imagem monocromática verde, clara e com grão, com vinheta circular.', FADE),
+  T2('thermal', 'THERMAL', 'Câmera térmica', 2, [P('amt', 'Intensidade', 30, 100, 100, '%')], 'Troca a luz por cores de calor: escuro vira azul, claro vira amarelo e branco.', FADE),
+  T2('xray', 'X-RAY', 'Raio-X', 2, [P('amt', 'Intensidade', 30, 100, 100, '%')], 'Negativo em preto e branco com tom frio e contraste alto.', FADE),
+  T2('ratio', 'RATIO SWITCH', 'Formato que muda', 2, [P('to', 'Faixas pretas', 5, 45, 22, '%')], 'Faixas pretas entram em cima e embaixo e mudam o formato do quadro no meio do vídeo.', [{ x: 0, y: 36 }, { x: 25, y: 4 }, { x: 100, y: 4 }]),
+  { key: 'lang', name: 'LINGUAGEM', hint: 'Marcador de linguagem', badge: 'Linguagem', len: 2, language: true, params: [], kf: [], sfx: null, recipe: '' }
+);
+
 export const TEXKEYS = {
   grain: 'Grão', dust: 'Poeira e riscos', jitter: 'Tremida de projetor', flicker: 'Flicker', halation: 'Halation',
-  softness: 'Suavidade de lente', vignette: 'Vinheta', leak: 'Vazamento de luz', tracking: 'Tracking e ruído de fita'
+  softness: 'Suavidade de lente', vignette: 'Vinheta', leak: 'Vazamento de luz', tracking: 'Tracking e ruído de fita', frame: 'Moldura de película', fade: 'Cor desbotada'
 };
 export const TEXTURES = [
   { key: 'super8', name: 'SUPER 8', hint: 'Grão alto, tremida, poeira e flicker', badge: 'Preset', set: { grain: 62, dust: 40, jitter: 24, flicker: 18, halation: 30 },
     recipe: 'Grão de tamanho médio com textura de filme, poeira e riscos aleatórios, leve tremida de quadro e flicker. Tudo gerado aqui, sem arquivo.', sfx: { key: 'projector', off: 0, vol: -26, when: 'Em loop, do começo ao fim' } },
+  { key: '8mm', name: '8 MM', hint: 'Grão grosso, moldura, tremida e cor desbotada', badge: 'Preset', set: { grain: 75, dust: 55, jitter: 35, flicker: 25, frame: 60, fade: 45, vignette: 30 },
+    recipe: 'Filme 8 mm caseiro: grão grosso, poeira, tremida de projetor, cantos arredondados de película e cor desbotada puxando pro quente. Gerado aqui, sem arquivo.', sfx: { key: 'projector', off: 0, vol: -24, when: 'Em loop, do começo ao fim' } },
+  { key: 'moldura', name: 'MOLDURA DE PELÍCULA', hint: 'Cantos arredondados e borda de filme', badge: 'Gerado', set: { frame: 70 }, recipe: 'Borda escura com cantos arredondados, como a janela do projetor.' },
   { key: '16mm', name: '16 MM', hint: 'Grão médio, cor suave, leve tremida', badge: 'Preset', set: { grain: 45, softness: 15, jitter: 10, halation: 12 }, recipe: 'Grão médio, cor suave e uma tremida leve de quadro.' },
   { key: '35mm', name: '35 MM', hint: 'Grão fino e brilho nas luzes fortes', badge: 'Preset', set: { grain: 30, halation: 35, softness: 20, vignette: 25 }, recipe: 'Grão fino, brilho suave ao redor das luzes mais fortes e um pouco de suavidade de lente.' },
   { key: 'vhs', name: 'VHS', hint: 'Ruído de fita, borda mole e tracking', badge: 'Preset', set: { grain: 25, tracking: 55, softness: 45, flicker: 10 }, recipe: 'Faixas de tracking, ruído de fita e bordas moles.' },
@@ -75,6 +119,13 @@ export const TEXTURES = [
   { key: 'halation', name: 'HALATION', hint: 'Brilho avermelhado nas luzes', badge: 'Gerado', set: { halation: 50 }, recipe: 'Brilho avermelhado ao redor das luzes fortes.' },
   { key: 'leak', name: 'LIGHT LEAK', hint: 'Vazamento de luz nas bordas', badge: 'Gerado', set: { leak: 55 }, recipe: 'Vazamento de luz quente que passa pelas bordas.' },
   { key: 'vinheta', name: 'VINHETA', hint: 'Escurece as bordas', badge: 'Gerado', set: { vignette: 45 }, recipe: 'Escurece as bordas do quadro.' }
+];
+// Onde baixar overlays 8mm gratuitos. Nada disso fica no Workbench: você baixa, põe na pasta Overlays e eles aparecem aqui.
+export const PACKS_8MM = [
+  { name: 'Film Looks', url: 'https://shop.filmlooks.com/', what: 'Scans reais de Super 8 e 16 mm: leaders, light leaks, poeira e riscos. Tem packs gratuitos e pagos.' },
+  { name: 'Hyper Projector', url: 'https://hyperprojector.gumroad.com/l/yOnWz', what: 'Grão 8 mm Kodak em 4K, preço livre (pode baixar por 0).' },
+  { name: 'Dissolve', url: 'https://dissolve.com/goodies', what: 'Grão 8 mm filmado em película, em quatro intensidades. Grátis com cadastro.' },
+  { name: 'Vecteezy', url: 'https://www.vecteezy.com/free-videos/8mm-film-overlay', what: 'Muitos overlays 8 mm. A versão grátis pede crédito ao autor.' }
 ];
 export const OVERLAY = { key: 'overlay', name: 'OVERLAY', hint: 'Vídeo da tua biblioteca, com modo de mistura', badge: 'Arquivo' };
 
@@ -106,6 +157,10 @@ export function newTech(key, a, duration) {
   const item = { id: newId(), kind: 'tec', key, name: t.name, a: r2(a), b: r2(Math.min(duration, a + t.len)), params: defParams(t.params), kf: t.kf.map((k) => ({ ...k })),
     sfx: t.sfx ? { key: t.sfx.key, off: t.sfx.off, vol: t.sfx.vol } : null, why: 'Adicionado por você no playhead.', auto: false, accepted: true };
   return syncLen(item);
+}
+export function newLang(ref, a, duration) {
+  return { id: newId(), kind: 'tec', key: 'lang', name: ref.name.toUpperCase(), slug: ref.slug, hint: ref.hint, a: r2(a), b: r2(Math.min(duration, a + 2)), params: {}, kf: [], sfx: null,
+    why: 'Marcado por você: aqui entra um plano de ' + ref.name + '.', auto: false, accepted: true };
 }
 export function newTexture(key, a, duration) {
   const t = texOf(key);
@@ -143,24 +198,30 @@ export const paramDefs = (item) => {
   if (item.kind === 'ov') return [{ k: 'opacity', label: 'Opacidade', min: 0, max: 100, def: 60, unit: '%' }, { k: 'scale', label: 'Escala', min: 50, max: 200, def: 100, unit: '%' }, { k: 'speed', label: 'Velocidade', min: 25, max: 300, def: 100, unit: '%' }];
   return [];
 };
-export const CURVES = ['linear', 'ease out', 'ease in-out'];
+export const CURVES = ['linear', 'ease out', 'ease in-out', 'crash (rápido)'];
 export function fmtParam(def, v) {
   if (def.unit === 'dir') return DIRS[Math.round(v)] || '';
   if (def.unit === 'curve') return CURVES[Math.round(v)] || '';
   if (def.unit === '%') return Math.round(v) + '%';
+  if (def.unit === '°') return Math.round(v) + '°';
+  if (def.unit === '') return String(Math.round(v));
+  if (def.unit === '×') return Math.round(v) + ' × ' + Math.round(v);
+  if (def.unit === 'px') return Math.round(v) + ' px';
+  if (def.unit === 'corner') return ['canto superior esquerdo', 'canto superior direito', 'canto inferior esquerdo', 'canto inferior direito'][Math.round(v)] || '';
   if (def.unit === 's') return String(Number(v).toFixed(def.dec == null ? 1 : def.dec)).replace('.', ',') + ' s';
   return Math.round(v) + ' ' + def.unit;
 }
 export const pctOf = (def, v) => clamp((v - def.min) / (def.max - def.min)) * 100;
 
 export const recipeOf = (item) => {
+  if (item.kind === 'tec' && (item.key === 'lang' || item.key === 'dolly')) return 'Marcador de linguagem: ' + (item.hint || 'câmera deslizando') + '. Não altera a imagem, é o lembrete de filmar ou montar esse trecho assim. A referência abre no Eyecandy.';
   if (item.kind === 'tec') { const t = techOf(item.key); return t ? t.recipe : ''; }
   if (item.kind === 'tx') { const t = texOf(item.key); return t ? t.recipe : ''; }
   if (item.kind === 'ov') return 'Modo de mistura Screen, em loop, sobre o clipe de baixo. O arquivo vem da tua biblioteca e não fica no Workbench.';
   if (item.kind === 'tt') return item.key === 'tarja' ? 'Barra com título e subtítulo no terço de baixo do quadro.' : 'Legenda centralizada no pé do quadro.';
   return 'Som sintetizado no navegador, sem arquivo.';
 };
-export const kindLabel = (item) => ({ tec: item.key === 'dolly' ? 'Marcador · linguagem' : 'Camada de ajuste · técnica', tx: 'Camada de ajuste · textura e lente', ov: 'Overlay em vídeo', tt: 'Texto', sx: 'Som avulso' }[item.kind]);
+export const kindLabel = (item) => ({ tec: item.key === 'dolly' || item.key === 'lang' ? 'Marcador · linguagem' : 'Camada de ajuste · técnica', tx: 'Camada de ajuste · textura e lente', ov: 'Overlay em vídeo', tt: 'Texto', sx: 'Som avulso' }[item.kind]);
 
 // ---------- matemática do efeito ----------
 // força 0..1 do efeito em p (0..1 ao longo do item), pelos keyframes
@@ -179,7 +240,7 @@ const easeInOut = (u) => (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2)
 
 // Estado visual dos efeitos ativos em t. Devolve { zoom, blurPx, dx, dy, flash, rate, skipTo, freezeAt, bw, split, active:[ids] }
 export function fxState(items, t, W = 1) {
-  const o = { zoom: 1, blur: 0, dir: [0, 0], offset: [0, 0], flash: 0, rate: 1, skipTo: null, freeze: null, bw: 0, split: null, active: [] };
+  const o = { zoom: 1, blur: 0, dir: [0, 0], offset: [0, 0], flash: 0, rate: 1, skipTo: null, freeze: null, bw: 0, split: null, active: [], looks: [] };
   for (const it of items) {
     if (it.kind !== 'tec' || t < it.a || t >= it.b) continue;
     const p = clamp((t - it.a) / Math.max(0.001, it.b - it.a));
@@ -192,7 +253,7 @@ export function fxState(items, t, W = 1) {
     } else if (it.key === 'flash') o.flash = Math.max(o.flash, (it.params.bright / 100) * e);
     else if (it.key === 'zoom') {
       const c = Math.round(it.params.curve); const u = clamp(p / 0.7);
-      const k = c === 0 ? u : c === 1 ? easeOut(u) : easeInOut(u);
+      const k = c === 0 ? u : c === 1 ? easeOut(u) : c === 2 ? easeInOut(u) : easeOut(clamp(p / 0.12));
       o.zoom *= 1 + (it.params.scale / 100 - 1) * k;
     } else if (it.key === 'speed') {
       const len = it.b - it.a; const tin = Math.min(it.params.in, len / 2); const tout = Math.min(it.params.out, len / 2);
@@ -202,6 +263,8 @@ export function fxState(items, t, W = 1) {
     } else if (it.key === 'jump') o.skipTo = it.b;
     else if (it.key === 'freeze') { o.freeze = it.a; o.bw = it.params.bw / 100; }
     else if (it.key === 'split') o.split = { pos: it.params.pos / 100 };
+    else if (it.key === 'slow' || it.key === 'fast') o.rate *= it.params.rate / 100;
+    else if (it.key !== 'lang' && it.key !== 'dolly') o.looks.push({ key: it.key, e, p, dt: t - it.a, len: it.b - it.a, params: it.params, id: it.id });
   }
   return o;
 }

@@ -32,11 +32,11 @@ function renderAlbum() {
 }
 const sw = (cols) => '<div class="sw">' + (cols || []).map((c) => `<i style="background:${c}"></i>`).join('') + '</div>';
 function renderPal() {
-  const e = edit(); const ref = (e && e.refPal) || EX_PAL; const i = gi();
+  const e = edit(); const ref = (e && M.refPalette(e)) || EX_PAL; const i = gi();
   const blk = (p) => ['Claros', 'Médios', 'Escuros'].map((l, k) => `<div class="lb">${l}</div>${sw(p ? p[k] : [])}`).join('');
   $('#c-pal').innerHTML = `<div class="p-head"><h2 class="tool">Paleta</h2></div><div class="pal-c">
     <div style="font-weight:800;font-size:12px">Teu material · G${i + 1}${st() ? ' · ' + plural(groupScenes(e, i), 'cena', 'cenas') : ''}</div>${blk(app.palCor)}
-    <div style="font-weight:800;font-size:12px;margin-top:14px">Referência</div><div class="note">${e && e.refPal ? 'Tirada da tua imagem de referência' : 'Exemplo, a paleta é anotada por você'}</div>${blk(ref)}
+    <div style="font-weight:800;font-size:12px;margin-top:14px">Referência</div><div class="note">${e && M.refPalette(e) ? 'Da referência do projeto' : 'Exemplo, a paleta é anotada por você'}</div>${blk(ref)}
     <div style="display:flex;flex-direction:column;gap:6px;margin-top:12px"><button type="button" class="btn" data-act="ref-load">Carregar imagem de referência</button>
     <button type="button" class="btn solid" data-act="pal-start" ${st() ? '' : 'aria-disabled="true"'}>Usar como ponto de partida</button></div></div>`;
 }
@@ -256,7 +256,7 @@ export const actions = {
   'ref-load'() { $('#ref-file').click(); },
   'pal-start'() {
     if (!app.palCor) { toast('Espere a prévia carregar.'); return; }
-    const ref = edit().refPal || EX_PAL; const p = G.primFromPalettes(app.palCor, ref);
+    const ref = M.refPalette(edit()) || EX_PAL; const p = G.primFromPalettes(app.palCor, ref);
     mutGrade('Ponto de partida pela referência', (gr) => { const n = gr.serial.find((x) => x.kind === 'prim'); if (n) { n.prim = { ...n.prim, lift: p.lift, gamma: p.gamma, gain: p.gain }; } return gr; });
     toast('Rodas ajustadas pra aproximar da paleta de referência. Refine no N1 · Primária.');
   },
@@ -339,7 +339,8 @@ export function bind() {
     const img = new Image(); img.src = URL.createObjectURL(f); await img.decode().catch(() => {});
     const c = document.createElement('canvas'); const s = Math.min(1, 640 / Math.max(img.width, img.height)); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
     app.refImg = c; const pal = G.extractPalette(c.getContext('2d').getImageData(0, 0, c.width, c.height).data);
-    if (edit()) mutEdit('Paleta de referência', (ed) => { ed.refPal = pal; return ed; });
-    app.ui.stillSel = null; if (app.ui.cv === 'atual') app.ui.cv = 'split'; render(); hooks.renderAll(); toast('Referência carregada. A paleta dela vale pro projeto e o visualizador mostra lado a lado.');
+    const tk = app.palTarget; app.palTarget = null;
+    if (edit()) mutEdit('Paleta de referência', (ed) => { const r = tk ? ed.cinema.find((x) => x.key === tk) : ed.cinema.find((x) => x.state === 'use'); if (r) r.pal = pal; else ed.refPal = pal; return ed; });
+    app.ui.stillSel = null; if (app.ui.cv === 'atual') app.ui.cv = 'split'; render(); hooks.renderAll(); toast('Paleta anotada' + (tk ? ' na referência' : '') + '. Ela vira a referência do projeto no monitor e na aba Cor.');
   });
 }

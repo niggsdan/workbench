@@ -10,10 +10,13 @@ const num = (x) => typeof x === 'number' && Number.isFinite(x);
 const r2 = (t) => Math.round(t * 100) / 100;
 
 export const DEFAULT_CINEMA = [
-  { key: 'cdd', name: 'CIDADE DE DEUS', dir: 'Dir. Fernando Meirelles', state: 'use' },
-  { key: 'aflp', name: 'AMOR À FLOR DA PELE', dir: 'Dir. Wong Kar-wai', state: 'use' },
-  { key: 'moon', name: 'MOONLIGHT', dir: 'Dir. Barry Jenkins', state: 'saved' }
+  { key: 'cdd', name: 'CIDADE DE DEUS', dir: 'Fernando Meirelles e Kátia Lund', year: '2002', dp: 'César Charlone', notes: '', pal: null, state: 'use' },
+  { key: 'aflp', name: 'AMOR À FLOR DA PELE', dir: 'Wong Kar-wai', year: '2000', dp: 'Christopher Doyle e Mark Lee Ping-bin', notes: '', pal: null, state: 'use' },
+  { key: 'moon', name: 'MOONLIGHT', dir: 'Barry Jenkins', year: '2016', dp: 'James Laxton', notes: '', pal: null, state: 'saved' }
 ];
+const okPal = (p) => Array.isArray(p) && p.length === 3 && p.every((l) => Array.isArray(l) && l.every((h) => /^#[0-9a-f]{6}$/i.test(h)));
+// paleta de referência do projeto: a da primeira referência em uso que tenha paleta, senão a anotada no projeto
+export const refPalette = (e) => { const r = e.cinema.find((c) => c.state === 'use' && okPal(c.pal)); return r ? r.pal : e.refPal; };
 
 export function newEdit() {
   return {
@@ -39,7 +42,7 @@ export function sanitizeEdit(x) {
   if (x.general && okGrade(x.general.grade)) d.general = { on: x.general.on !== false, grade: x.general.grade };
   if (['youtube', 'tiktok', 'instagram'].includes(x.platform)) d.platform = x.platform;
   if (x.container === 'mov') d.container = 'mov';
-  if (Array.isArray(x.cinema) && x.cinema.every((c) => c && typeof c.key === 'string' && typeof c.name === 'string')) d.cinema = x.cinema.map((c) => ({ dir: '', ...c, state: c.state === 'use' ? 'use' : 'saved' }));
+  if (Array.isArray(x.cinema) && x.cinema.every((c) => c && typeof c.key === 'string' && typeof c.name === 'string')) d.cinema = x.cinema.map((c) => ({ dir: '', year: '', dp: '', notes: '', url: '', ...c, dir: String(c.dir || '').replace(/^Dir\. /, ''), pal: okPal(c.pal) ? c.pal : null, state: c.state === 'use' ? 'use' : 'saved' }));
   if (Array.isArray(x.refPal) && x.refPal.length === 3 && x.refPal.every((l) => Array.isArray(l) && l.every((h) => /^#[0-9a-f]{6}$/i.test(h)))) d.refPal = x.refPal;
   if (x.briefing && typeof x.briefing === 'object') d.briefing = { name: String(x.briefing.name || ''), notes: String(x.briefing.notes || '') };
   if (x.transcript) d.transcript = sanitizeTranscript(x.transcript);
